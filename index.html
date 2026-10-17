@@ -126,6 +126,19 @@ input[type=checkbox]{width:20px;height:20px;accent-color:var(--accent);margin:0}
 .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .finish{border-top:1px solid var(--line);padding-top:16px;display:flex;flex-direction:column;gap:10px}
 .confirm{background:var(--accent-soft);border-radius:4px;padding:12px 14px;display:flex;flex-direction:column;gap:10px}
+.cal{display:flex;flex-direction:column;gap:4px}
+.cal-head,.cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}
+.cal-head span{font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600;text-align:center;padding:2px 0}
+.cal-cell{min-height:76px;border:1px solid var(--rule);border-radius:4px;background:var(--sheet);padding:5px 6px;display:flex;flex-direction:column;align-items:flex-start;gap:3px;cursor:pointer;text-align:left;min-width:0;font:inherit;color:inherit}
+.cal-cell:hover{border-color:var(--accent);background:var(--accent-soft)}
+.cal-cell.blank{border:0;background:transparent;cursor:default}
+.cal-cell.today{border:2px solid var(--accent)}
+.cal-cell.future .cal-n{color:var(--muted)}
+.cal-n{font-weight:700;font-variant-numeric:tabular-nums;font-size:.9rem}
+.cal-cell .sc{font-size:.78rem;padding:1px 6px}
+.cal-empty{font-size:.7rem;color:var(--muted)}
+.cal-focus{font-size:.7rem;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+@media (max-width:560px){.cal-cell{min-height:54px;padding:4px}.cal-focus{display:none}.cal-head,.cal-grid{gap:3px}}
 .editbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;border:1px solid var(--line);border-radius:4px;padding:10px 14px;background:var(--paper)}
 .editbar.editing{border-color:var(--gold);background:var(--gold-soft)}
 .editbar>div{min-width:0;flex:1 1 16rem}
@@ -227,6 +240,7 @@ textarea.code{width:100%;min-height:140px;font-family:ui-monospace,Consolas,mono
   <div class="top-in">
     <div class="brand"><b>6-Minute <span>Journal</span></b><button id="status" class="status" data-act="retry" data-s="idle"></button></div>
     <nav class="tabs" aria-label="Sections">
+      <button data-tab="calendar">Calendar</button>
       <button data-tab="day">Day</button>
       <button data-tab="week">Week</button>
       <button data-tab="progress">Progress</button>
@@ -314,9 +328,9 @@ const IDB={
 };
 
 /* ---------- state ---------- */
-const S={days:new Map(),weeks:new Map(),meta:new Map(),reviews:new Map(),tab:'day',cur:null,weekMon:null,
+const S={days:new Map(),weeks:new Map(),meta:new Map(),reviews:new Map(),tab:'calendar',cur:null,calMonth:null,loadingDay:null,dayMsg:'',weekMon:null,
   unlocked:new Set(),range:30,confirm:false,restore:null,restoreMsg:'',
-  backupMsg:'',copyText:'',date:null,dir:null,savedDir:null,connectMsg:'',needLogin:false,flash:'',sub:'',lastSync:0,syncing:false,syncMsg:'',folderMsg:'',settings:null,settingsMsg:''};
+  backupMsg:'',copyText:'',date:null,dir:null,savedDir:null,connectMsg:'',needLogin:false,flash:'',base:new Map(),sub:'',lastSync:0,syncing:false,syncMsg:'',folderMsg:'',settings:null,settingsMsg:''};
 
 /* ---------- models ---------- */
 const arr=(a,n,f)=>{a=Array.isArray(a)?a.slice():[];while(a.length<n)a.push(typeof f==='function'?f():f);return a;};
@@ -422,10 +436,19 @@ function graphStore(){
   const cacheKey='smj6:gcache'+(S.sub?':'+S.sub:'');
   let cache={};try{cache=JSON.parse(localStorage.getItem(cacheKey)||'{}');}catch(e){}
   const keep=()=>{try{localStorage.setItem(cacheKey,JSON.stringify(cache));}catch(e){}};
-  async function put(rel,text){
-    const r=await graph(`${root}${enc(rel)}:/content`,{method:'PUT',headers:{'Content-Type':'text/plain'},body:text});
+  // Conditional write. etag given: only if the file is still that version (If-Match).
+  // etag null: only if the file does not exist yet. force: unconditional (restore from backup).
+  async function put(rel,text,etag,force){
+    let url=`${root}${enc(rel)}:/content`; const headers={'Content-Type':'text/plain'};
+    if(!force){if(etag) headers['If-Match']=etag; else url+='?@microsoft.graph.conflictBehavior=fail';}
+    const r=await graph(url,{method:'PUT',headers,body:text});
+    if(r.status===412||r.status===409) throw Object.assign(new Error('Changed on another device'),{code:'conflict'});
     if(!r.ok) throw new Error('OneDrive save failed ('+r.status+')');
     return r.json();
+  }
+  // Downloads a file's text; a failed download throws instead of being treated as "no page".
+  async function download(urlStr){
+    for(let i=0;i<2;i++){const r=await fetch(urlStr,{cache:'no-store'});if(r.ok) return r.text();if(i) throw new Error('OneDrive download failed ('+r.status+')');}
   }
   return{
     async all(c){
@@ -436,14 +459,58 @@ function graphStore(){
       const out=[], seen=new Set();
       await pool(items,6,async it=>{const k=c+'/'+it.name;seen.add(k);let text;
         if(cache[k]&&cache[k].etag===it.eTag) text=cache[k].text;
-        else{const r=await fetch(it['@microsoft.graph.downloadUrl']);text=await r.text();cache[k]={etag:it.eTag,text};}
-        try{out.push({id:it.name.slice(0,-5),data:JSON.parse(text)});}catch(e){console.warn('Skipped unreadable file',k);}});
+        else{text=await download(it['@microsoft.graph.downloadUrl']);cache[k]={etag:it.eTag,text};}
+        let data;try{data=JSON.parse(text);}catch(e){throw new Error('A journal file is damaged: '+k);}
+        out.push({id:it.name.slice(0,-5),data,etag:it.eTag});});
       for(const k of Object.keys(cache)) if(k.startsWith(c+'/')&&!seen.has(k)) delete cache[k];
       keep();return out;},
-    async set(c,id,data){const text=JSON.stringify(data,null,2);const j=await put(`data/${c}/${id}.json`,text);cache[`${c}/${id}.json`]={etag:j.eTag,text};keep();},
+    // Latest version of one file, or null if it does not exist.
+    async get(c,id){
+      const r=await graph(`${root}${enc(`data/${c}/${id}.json`)}?$select=eTag,@microsoft.graph.downloadUrl`,{cache:'no-store'});
+      if(r.status===404) return null;
+      if(!r.ok) throw new Error('OneDrive read failed ('+r.status+')');
+      const j=await r.json();const text=await download(j['@microsoft.graph.downloadUrl']);
+      cache[`${c}/${id}.json`]={etag:j.eTag,text};keep();
+      return{data:JSON.parse(text),etag:j.eTag};
+    },
+    async set(c,id,data,etag,force){const text=JSON.stringify(data,null,2);const j=await put(`data/${c}/${id}.json`,text,etag,force);
+      cache[`${c}/${id}.json`]={etag:j.eTag,text};keep();return{etag:j.eTag};},
     async del(c,id){await graph(`${root}${enc(`data/${c}/${id}.json`)}`,{method:'DELETE'});delete cache[`${c}/${id}.json`];keep();},
-    async writeText(path,name,text){await put(`${path}/${name}`,text);}
+    async writeText(path,name,text){await put(`${path}/${name}`,text,null,true);}
   };
+}
+/* Three-way merge used when another device saved the same file first.
+   base = version this device loaded, local = this device now, remote = the newer saved version.
+   A field changed only on one side takes that side; changed on both sides, this device wins,
+   except that an archived day stays archived. Lists combine items from both sides. */
+const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
+function merge3(base,local,remote){
+  if(same(local,base)) return remote;
+  if(same(remote,base)||same(local,remote)) return local;
+  if(Array.isArray(local)&&Array.isArray(remote)){
+    const b=Array.isArray(base)?base:[];
+    const isEmpty=v=>v==null||(typeof v==='string'&&!filled(v))||(typeof v==='object'&&v.text!==undefined&&!filled(v.text));
+    const key=v=>v&&typeof v==='object'&&v.text!==undefined?String(v.text).trim().toLowerCase():JSON.stringify(v);
+    const out=[], lost=[];
+    for(let i=0;i<Math.max(local.length,remote.length);i++){
+      const l=local[i], r=remote[i];
+      if(i>=local.length){if(!b.some(z=>same(z,r))) out.push(r);continue;}
+      if(i>=remote.length){out.push(l);continue;}
+      const m=merge3(b[i],l,r); out.push(m);
+      if(!same(r,b[i])&&!isEmpty(r)&&key(m)!==key(r)) lost.push(r); // both sides wrote different entries here
+    }
+    for(const r of lost){if(out.some(x=>key(x)===key(r))) continue;const slot=out.findIndex(isEmpty);if(slot>=0) out[slot]=r; else out.push(r);}
+    return out;
+  }
+  if(local&&remote&&typeof local==='object'&&typeof remote==='object'){
+    const out={},bb=(base&&typeof base==='object')?base:{};
+    for(const k of new Set([...Object.keys(local),...Object.keys(remote)])) out[k]=merge3(bb[k],local[k],remote[k]);
+    if(local.status==='closed'||remote.status==='closed') out.status='closed';
+    if(local.carriedTo||remote.carriedTo) out.carriedTo=local.carriedTo||remote.carriedTo;
+    return out;
+  }
+  if(typeof local==='string'&&!filled(local)&&filled(remote)) return remote; // never blank out text written elsewhere
+  return local;
 }
 // Unsaved edits survive a sign-in redirect: they are parked in localStorage and saved again after login.
 function parkPending(){const out=[];for(const k of Object.keys(saveQ)){const [c,id]=k.split('/');const d=S[c]&&S[c].get(id);if(d)out.push([c,id,d]);}
@@ -507,10 +574,34 @@ async function flush(col,id){
   const k=col+'/'+id, q=saveQ[k]; if(!q) return;
   clearTimeout(q.timer); q.timer=null;
   if(q.inflight){q.again=true;return;}
-  const data=S[col].get(id); if(!data){delete saveQ[k];return;}
+  if(!S[col].get(id)){delete saveQ[k];return;}
   q.inflight=true; q.dirty=false;
-  try{data.updatedAt=Date.now();await store.set(col,id,JSON.parse(JSON.stringify(data)));
-    if(col==='days'&&dayStats(data,profile().habits).journaled) await store.writeText('pages',`${id.replaceAll('-','')}-Journal-Day Page-v1.md`,dayMarkdown(data));
+  try{
+    let merged=false;
+    for(let attempt=0;;attempt++){
+      const data=S[col].get(id); data.updatedAt=Date.now();
+      const snapshot=JSON.parse(JSON.stringify(data)), base=S.base.get(k);
+      try{
+        const res=await store.set(col,id,snapshot,base?base.etag:null);
+        S.base.set(k,{etag:res&&res.etag||null,data:snapshot});
+        break;
+      }catch(e){
+        if(e.code!=='conflict'||attempt>=3) throw e;
+        // Another device saved this file first: combine both versions, then save again with the new version tag.
+        const remote=await store.get(col,id);
+        const baseData=base?base.data:(col==='days'?newDay(id):col==='weeks'?normWeek({id}):{});
+        const current=S[col].get(id);
+        const result=remote?merge3(baseData,current,remote.data):current;
+        if(col==='days') normDay(result); if(col==='weeks') normWeek(result);
+        S[col].set(id,result);
+        if(remote){const rb=JSON.parse(JSON.stringify(remote.data));if(col==='days')normDay(rb);if(col==='weeks')normWeek(rb);S.base.set(k,{etag:remote.etag,data:rb});}
+        else S.base.set(k,{etag:null,data:baseData});
+        merged=true;
+      }
+    }
+    const saved=S[col].get(id);
+    if(col==='days'&&dayStats(saved,profile().habits).journaled) await store.writeText('pages',`${id.replaceAll('-','')}-Journal-Day Page-v1.md`,dayMarkdown(saved));
+    if(merged) softRender();
     q.failed=false;}
   catch(e){console.warn('save failed',e);q.dirty=true;q.failed=true;
     setStatus('error',CLOUD_MODE?(e&&e.code==='auth'?'Your sign-in expired. Tap to sign in again; your changes are kept.':'No connection to OneDrive. Your changes stay on screen; tap to try again.')
@@ -550,20 +641,34 @@ function carry(from,to){
   }
   from.carriedTo=to.date;
 }
+// Keeps track of today's date only. It never creates or changes a page: pages are written only by the
+// user's own actions (Create page, typing, Finish day, Save), so opening the app on another device is always safe.
 function ensureTimeline(){
-  const t=todayStr(); S.date=t;
-  const dates=[...S.days.keys()].sort();
-  for(const d of dates){const x=S.days.get(d);if(d<t&&x.status==='open'){x.status='closed';x.closedAt=Date.now();scheduleSave('days',d,60);}}
-  if(!S.days.has(t)){
-    const day=newDay(t); const prev=dates.filter(d=>d<t).pop();
-    if(prev){carry(S.days.get(prev),day);scheduleSave('days',prev,60);}
-    S.days.set(t,day); scheduleSave('days',t,60);
-  }
-  const open=[...S.days.keys()].sort().filter(d=>d>=t&&S.days.get(d).status==='open');
-  S.cur=open[0]||t; S.weekMon=mondayOf(S.cur);
+  const t=todayStr(), changed=S.date!==t; S.date=t;
+  if(!S.cur||changed) S.cur=t;
+  if(!S.weekMon||changed) S.weekMon=mondayOf(S.cur);
+  if(!S.calMonth||changed) S.calMonth=t.slice(0,7);
 }
-function maxDate(){const ks=[...S.days.keys()].sort();const last=ks[ks.length-1]||S.date;const tm=addDays(S.date,1);return last>tm?last:tm;}
+// A page counts as archived once it was finished or its date has passed (shown locked, nothing is written).
+const isArchived=(d,date)=>!!d&&(d.status==='closed'||date<S.date);
 function checkDate(){if(S.date&&todayStr()!==S.date){ensureTimeline();render();}}
+// Opening a day always reads the latest saved version first, so an old copy on this device is never shown or saved.
+async function openDay(date){
+  S.cur=date;S.tab='day';S.confirm=false;S.flash='';S.dayMsg='';S.weekMon=mondayOf(date);
+  const k='days/'+date;
+  if(store&&store.get&&!saveQ[k]){
+    S.loadingDay=date;render();window.scrollTo(0,0);
+    try{
+      const r=await store.get('days',date);
+      if(!saveQ[k]&&S.cur===date){
+        if(r){const d=normDay(r.data);S.days.set(date,d);const b=JSON.parse(JSON.stringify(d));S.base.set(k,{etag:r.etag,data:b});}
+        else if(S.days.has(date)){S.days.delete(date);S.base.delete(k);}
+      }
+    }catch(e){S.dayMsg=e&&e.code==='auth'?'Your sign-in expired. Sign in again to load this page.':'The latest version could not be loaded from OneDrive. Check the connection.';}
+    S.loadingDay=null;
+  }
+  render();window.scrollTo(0,0);
+}
 
 /* ---------- scoring & analysis ---------- */
 function dayStats(d,habits){
@@ -651,7 +756,7 @@ function render(){
   document.querySelectorAll('[data-tab]').forEach(b=>b.setAttribute('aria-current',b.dataset.tab===S.tab?'page':'false'));
   const v=S.tab, m=$('#main');
   if(!store){m.innerHTML=viewConnect();return;}
-  m.innerHTML=(v==='week'?viewWeek():v==='me'?viewMe():v==='history'?viewHistory():v==='progress'?viewProgress():v==='settings'?viewSettings():viewDay());
+  m.innerHTML=(v==='week'?viewWeek():v==='me'?viewMe():v==='history'?viewHistory():v==='progress'?viewProgress():v==='settings'?viewSettings():v==='calendar'?viewCalendar():viewDay());
 }
 const banner=()=>'';
 function viewConnect(){
@@ -677,17 +782,21 @@ function relLabel(date){const t=S.date;return date===t?'Today':date===addDays(t,
 
 function viewDay(){
   const date=S.cur, t=S.date, d=S.days.get(date), p=profile();
-  const nav=`<div class="daynav"><button class="ghost" data-act="day-go" data-d="-1" aria-label="Previous day">‹</button>
+  const nav=`<div class="daynav"><button class="ghost small" data-act="tab" data-tab="calendar">Calendar</button><button class="ghost" data-act="day-go" data-d="-1" aria-label="Previous day">‹</button>
     <button class="ghost small" data-act="day-today" ${date===t?'disabled':''}>Today</button>
-    <button class="ghost" data-act="day-go" data-d="1" ${date>=maxDate()?'disabled':''} aria-label="Next day">›</button></div>`;
+    <button class="ghost" data-act="day-go" data-d="1" aria-label="Next day">›</button></div>`;
   const q=QUOTES[((dayIndex(date)%QUOTES.length)+QUOTES.length)%QUOTES.length];
-  const locked=!!d&&d.status==='closed'&&!S.unlocked.has(date);
+  const arch=isArchived(d,date), locked=arch&&!S.unlocked.has(date);
   const rl=relLabel(date);
-  const chips=[rl?`<span class="chip">${rl}</span>`:'',d&&d.status==='closed'?`<span class="chip locked">${locked?'Archived':'Archived · editing'}</span>`:''].join('');
+  const chips=[rl?`<span class="chip">${rl}</span>`:'',arch?`<span class="chip locked">${locked?'Archived':'Archived · editing'}</span>`:''].join('');
   const head=`<div class="dhead"><div class="drow"><ol class="wd" aria-label="Weekday">${WD.map((w,k)=>`<li class="${k===dow(date)?'on':''}">${w}</li>`).join('')}</ol>${nav}</div>
     <h1 class="date">${esc(fmtLong(date))}</h1><div class="row">${chips}</div></div>
+    ${S.dayMsg?`<p class="err">${esc(S.dayMsg)}</p>`:''}
     <blockquote class="quote"><p>${esc(q[0])}</p><cite>${esc(q[1])}</cite></blockquote>`;
-  if(!d) return banner()+`<article class="sheet">${head}<div class="empty"><p class="muted">No page was written for this day.</p><button class="btn" data-act="day-create">Write this page now</button></div></article>`;
+  if(S.loadingDay===date) return banner()+`<article class="sheet">${head}<p class="loading">Loading the saved page…</p></article>`;
+  if(!d) return banner()+`<article class="sheet">${head}<div class="empty"><h3>This page is empty</h3>
+    <p class="muted">Nothing has been saved for ${esc(fmtLong(date))} yet.${date<t?' You can still write it afterwards.':''}</p>
+    <button class="btn" data-act="day-create">Create page for ${esc(fmtShort(date))}</button></div></article>`;
   const dis=locked?'disabled':'';
   const b=path=>`data-b="days/${date}/${path}"`;
   const line=(path,val,ph,label)=>`<input class="line" type="text" ${b(path)} value="${esc(val)}" placeholder="${esc(ph)}" aria-label="${esc(label||ph)}" ${dis}>`;
@@ -701,7 +810,7 @@ function viewDay(){
   const sec=(n,title,sub,body,eve)=>`<section class="sec ${eve?'eve':''}"><span class="num">${n}</span><div class="sec-b"><div class="sec-h"><h3>${title}${sub?`<small>${sub}</small>`:''}</h3></div>${body}</div></section>`;
 
   const edited=d.editedAt?`<span class="small muted">Last changed after archiving: ${esc(new Date(d.editedAt).toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}))}.</span>`:'';
-  const editBar=d.status!=='closed'?'':locked
+  const editBar=!arch?'':locked
     ?`<div class="editbar"><div><strong>This page is archived.</strong> ${edited||'<span class="small muted">You can still correct or complete it.</span>'}</div><button class="btn sec2" data-act="unlock">Edit page</button></div>`
     :`<div class="editbar editing"><div><strong>Editing an archived page.</strong> <span class="small muted">Changes save automatically; click Save when you are done.</span></div><button class="btn" data-act="lock">Save</button></div>`;
   let html=banner()+`<article class="sheet">${head}${editBar}${S.flash?`<p class="flash">${esc(S.flash)}</p>`:''}
@@ -729,11 +838,11 @@ function viewDay(){
     :`<p class="small muted">No habits yet.</p><button class="linkbtn" data-act="tab" data-tab="me" data-anchor="habits">Add habits to track</button>`,true);
   html+=`<div class="finish"><div class="score-line"><span class="label">Day score</span><strong>${s.score}</strong><span class="muted small">/ 100 · focus 40, tasks 2 and 3: 20, relax 15${p.habits.length?', habits 15':''}, reflection 10</span></div>`;
   if(locked) html+=`<div class="row"><button class="btn sec2" data-act="unlock">Edit page</button><span class="small muted">Archived pages are locked against accidental changes.</span></div>`;
-  else if(date<=t&&d.status==='open'){
+  else if(date===t&&d.status==='open'){
     html+=S.confirm?`<div class="confirm"><p>Lock this page and open tomorrow's page? Unfinished tasks move to tomorrow.</p><div class="row"><button class="btn" data-act="finish-yes">Finish day</button><button class="ghost" data-act="finish-no">Cancel</button></div></div>`
       :`<div class="row"><button class="btn" data-act="finish">Finish day &amp; prepare tomorrow</button><span class="small muted">Do this in the evening after steps 7 and 8.</span></div>`;
   } else if(date>t) html+=`<p class="small muted">Prepared in advance. This page becomes today's page in the morning.</p>`;
-  else if(d.status==='closed') html+=`<div class="row"><button class="btn" data-act="lock">Save</button><span class="small muted">Saves your changes and locks the page again.</span></div>`;
+  else if(arch) html+=`<div class="row"><button class="btn" data-act="lock">Save</button><span class="small muted">Saves your changes and locks the page again.</span></div>`;
   html+=`</div></article>`;
   return html;
 }
@@ -827,6 +936,33 @@ function viewHistory(){
     ${S.restore?`<div class="confirm"><p>Backup from ${esc(S.restore.at||'unknown date')} with ${S.restore.counts}. Pages with the same date are replaced by the backup version. Other pages stay.</p><div class="row"><button class="btn danger" data-act="restore-yes">Restore backup</button><button class="ghost" data-act="restore-no">Cancel</button></div></div>`:''}
     ${S.restoreMsg?`<p class="small">${esc(S.restoreMsg)}</p>`:''}</article>`;
   return h;
+}
+
+// Start page: month calendar (Monday first). Each saved day shows its day score; clicking a day opens it.
+function viewCalendar(){
+  const m=S.calMonth||S.date.slice(0,7), [y,mo]=m.split('-').map(Number), p=profile();
+  const lead=(new Date(y,mo-1,1).getDay()+6)%7, daysIn=new Date(y,mo,0).getDate();
+  const title=new Date(y,mo-1,1).toLocaleDateString('en-GB',{month:'long',year:'numeric'});
+  let cells='', written=0, scoreSum=0, focusDone=0;
+  for(let i=0;i<lead;i++) cells+='<span class="cal-cell blank" aria-hidden="true"></span>';
+  for(let day=1;day<=daysIn;day++){
+    const date=`${y}-${pad(mo)}-${pad(day)}`, doc=S.days.get(date), s=doc?dayStats(doc,p.habits):null;
+    const cls=['cal-cell',date===S.date?'today':'',date>S.date?'future':'',doc?'has':''].join(' ');
+    let badge='', label=fmtLong(date);
+    if(s&&s.journaled){written++;scoreSum+=s.score;if(s.focusDone)focusDone++;
+      badge=`<span class="sc ${s.score>=70?'g':s.score>=40?'m':'l'}">${s.score}</span>`;label+=`, score ${s.score}`;}
+    else if(doc){badge='<span class="cal-empty">page</span>';label+=', empty page';}
+    else label+=', no page';
+    cells+=`<button class="${cls}" data-act="open-day" data-date="${date}" aria-label="${esc(label)}"><span class="cal-n">${day}</span>${badge}${doc&&filled(doc.focus.text)?`<span class="cal-focus">${doc.focus.done?'✓ ':''}${esc(doc.focus.text)}</span>`:''}</button>`;
+  }
+  const isNow=m===S.date.slice(0,7);
+  return banner()+`<article class="sheet"><div class="dhead"><div class="drow"><span class="label">Calendar</span>
+    <div class="daynav"><button class="ghost" data-act="cal-go" data-d="-1" aria-label="Previous month">‹</button><button class="ghost small" data-act="cal-now" ${isNow?'disabled':''}>This month</button><button class="ghost" data-act="cal-go" data-d="1" aria-label="Next month">›</button></div></div>
+    <h1 class="date">${esc(title)}</h1>
+    <p class="muted">${written?`${written} day${written===1?'':'s'} written · average score ${Math.round(scoreSum/written)} · daily focus done on ${focusDone} day${focusDone===1?'':'s'}.`:'No pages written this month yet.'} Click a day to open or create its page.</p></div>
+    <div class="cal"><div class="cal-head">${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d=>`<span>${d}</span>`).join('')}</div><div class="cal-grid">${cells}</div></div>
+    <div class="legend"><span><i style="background:var(--accent)"></i>score 70 and above</span><span><i style="background:var(--gold)"></i>40 to 69</span><span><i style="background:var(--bad)"></i>below 40</span><span><i style="border:2px solid var(--accent);background:transparent"></i>today</span></div>
+    ${isNow?`<div class="row"><button class="btn" data-act="open-day" data-date="${S.date}">Open today</button></div>`:''}</article>`;
 }
 
 function folderLabel(){
@@ -984,7 +1120,7 @@ document.addEventListener('input',e=>{
   const doc=S[col].get(id);if(!doc)return;
   const val=el.type==='checkbox'?el.checked:el.value;
   setPath(doc,path,val);
-  if(col==='days'&&doc.status==='closed') doc.editedAt=Date.now();
+  if(col==='days'&&isArchived(doc,id)) doc.editedAt=Date.now();
   scheduleSave(col,id,el.type==='checkbox'||el.tagName==='SELECT'?150:700);
   if('rerender' in el.dataset) render();
 });
@@ -1007,7 +1143,9 @@ document.addEventListener('change',async e=>{
   catch(err){S.restore=null;S.restoreMsg='This file is not a journal backup. Choose a file saved with "Save backup file".';}
   render();
 });
-document.querySelectorAll('[data-tab]').forEach(b=>b.addEventListener('click',()=>{S.tab=b.dataset.tab;lsSet('smj6:tab',S.tab);S.confirm=false;render();window.scrollTo(0,0);}));
+document.querySelectorAll('.tabs [data-tab]').forEach(b=>b.addEventListener('click',()=>{
+  if(b.dataset.tab==='day'&&store) return openDay(S.cur||S.date);
+  S.tab=b.dataset.tab;S.confirm=false;render();window.scrollTo(0,0);}));
 let rz;window.addEventListener('resize',()=>{clearTimeout(rz);rz=setTimeout(()=>{if(S.tab==='progress'&&!typing())render();},250);});
 // Coming back to the tab: pick up a new date and any files changed elsewhere (another PC, or Claude writing a review).
 window.addEventListener('online',()=>{if(store&&Object.keys(saveQ).length)A.retry();});
@@ -1034,11 +1172,22 @@ setInterval(refreshFromStore,45*1000);
 setInterval(checkDate,5*60*1000);
 
 const A={
-  tab(a){S.tab=a.dataset.tab;lsSet('smj6:tab',S.tab);render();if(a.dataset.anchor){const el=document.getElementById(a.dataset.anchor);if(el)el.scrollIntoView();}else window.scrollTo(0,0);},
-  'day-go'(a){S.cur=addDays(S.cur,+a.dataset.d);S.confirm=false;S.flash='';render();},
-  'day-today'(){S.cur=S.date;S.confirm=false;S.flash='';render();},
-  'day-create'(){const d=newDay(S.cur);if(S.cur<S.date){d.status='closed';S.unlocked.add(S.cur);}S.days.set(S.cur,d);scheduleSave('days',S.cur,50);render();},
-  'open-day'(a){S.cur=a.dataset.date;S.tab='day';S.confirm=false;S.flash='';render();window.scrollTo(0,0);},
+  tab(a){if(a.dataset.tab==='day'&&store) return openDay(S.cur||S.date);S.tab=a.dataset.tab;render();if(a.dataset.anchor){const el=document.getElementById(a.dataset.anchor);if(el)el.scrollIntoView();}else window.scrollTo(0,0);},
+  'day-go'(a){openDay(addDays(S.cur,+a.dataset.d));},
+  'day-today'(){openDay(S.date);},
+  // Create page: the only way a new day page is made. Unfinished tasks of the latest earlier page move here.
+  // Saved as "create only if it does not exist yet"; if another device created it meanwhile, both are combined.
+  'day-create'(){
+    const date=S.cur; if(S.days.has(date)) return render();
+    const d=newDay(date);
+    const prev=[...S.days.keys()].filter(x=>x<date).sort().pop();
+    if(prev){const p=S.days.get(prev);if(!p.carriedTo){carry(p,d);scheduleSave('days',prev,60);}}
+    S.days.set(date,d); if(date<S.date) S.unlocked.add(date);
+    scheduleSave('days',date,50); render();
+  },
+  'open-day'(a){openDay(a.dataset.date);},
+  'cal-go'(a){const [y,m]=S.calMonth.split('-').map(Number);const d=new Date(y,m-1+(+a.dataset.d),1);S.calMonth=`${d.getFullYear()}-${pad(d.getMonth()+1)}`;render();},
+  'cal-now'(){S.calMonth=S.date.slice(0,7);render();},
   'open-week'(a){S.weekMon=a.dataset.m;S.tab='week';render();window.scrollTo(0,0);},
   add(a){const d=S.days.get(S.cur);d[a.dataset.list].push(a.dataset.list==='relax'?{text:'',done:false}:todo());scheduleSave('days',S.cur,300);render();
     const ins=document.querySelectorAll(`[data-b^="days/${S.cur}/${a.dataset.list}."][type=text]`);if(ins.length)ins[ins.length-1].focus();},
@@ -1126,7 +1275,7 @@ const A={
   async 'restore-yes'(){const o=S.restore.data;S.restore=null;S.restoreMsg='Restoring…';render();let n=0,fail=0;
     for(const c of COLS){const src=o[c]||{};for(const [id,data] of Object.entries(src)){if(!data||typeof data!=='object')continue;
       if(c==='days')normDay(data);if(c==='weeks')normWeek(data);S[c].set(id,data);
-      try{await store.set(c,id,JSON.parse(JSON.stringify(data)));n++;}catch(e){fail++;}}}
+      try{const snap=JSON.parse(JSON.stringify(data));const res=await store.set(c,id,snap,null,true);S.base.set(c+'/'+id,{etag:res&&res.etag||null,data:snap});n++;}catch(e){fail++;}}}
     S.restoreMsg=`Restored ${n} items.${fail?` ${fail} could not be saved.`:''}`;ensureTimeline();render();},
   retry(){if(CLOUD_MODE&&S.needLogin){A.signin();return;}
     for(const k of Object.keys(saveQ)){const [c,id]=k.split('/');saveQ[k].failed=false;flush(c,id);}}
@@ -1136,12 +1285,17 @@ document.addEventListener('click',e=>{const a=e.target.closest('[data-act]');if(
 /* ---------- boot ---------- */
 // Reads every collection into fresh maps first, so a failed read never wipes what is on screen.
 // With background=true the swap is skipped if the user started editing while files were being read.
+// S.base remembers the version tag and content of every file as loaded, for conflict-safe saving.
 async function loadAll(background){
-  const next={};for(const c of COLS){next[c]=new Map();for(const {id,data} of await store.all(c))next[c].set(id,data);}
+  const next={},base=new Map();
+  for(const c of COLS){next[c]=new Map();
+    for(const {id,data,etag} of await store.all(c)){
+      if(c==='days')normDay(data); if(c==='weeks')normWeek(data);
+      next[c].set(id,data); base.set(c+'/'+id,{etag:etag||null,data:JSON.parse(JSON.stringify(data))});
+    }}
   if(background&&(Object.keys(saveQ).length||typing())) return false;
   for(const c of COLS)S[c]=next[c];
-  for(const d of S.days.values())normDay(d);
-  for(const w of S.weeks.values())normWeek(w);
+  S.base=base;
 }
 async function openFolder(h){
   const prev=store;S.dir=h;store=NATIVE?nativeStore():CLOUD_MODE?graphStore():fsStore(h);
@@ -1156,7 +1310,7 @@ async function openFolder(h){
   ensureTimeline();refreshStatus();render();
 }
 async function boot(){
-  const t=lsGet('smj6:tab');if(t&&['day','week','progress','me','history','settings'].includes(t))S.tab=t;
+  S.tab='calendar'; // the app always starts on the calendar
   S.sub=lsGet('smj6:sub')||'';
   if(CLOUD_MODE){
     if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
