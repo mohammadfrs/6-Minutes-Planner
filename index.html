@@ -93,6 +93,9 @@ textarea.lined{width:100%;border:0;resize:vertical;font-size:16px;line-height:32
 textarea.lined:focus{outline:none;background-image:repeating-linear-gradient(to bottom,transparent 0,transparent 31px,var(--accent-soft) 31px,var(--accent-soft) 32px)}
 :disabled{opacity:1}
 input:disabled,textarea:disabled,select:disabled{color:var(--ink);-webkit-text-fill-color:var(--ink)}
+/* Example sentences are hints only: light and italic while writing, invisible on locked (saved) pages. */
+input::placeholder,textarea::placeholder{color:var(--muted);-webkit-text-fill-color:var(--muted);opacity:.6;font-style:italic}
+input:disabled::placeholder,textarea:disabled::placeholder{color:transparent;-webkit-text-fill-color:transparent}
 
 .item{display:flex;align-items:center;gap:8px;min-width:0}
 .item input[type=checkbox]{flex:none}
@@ -979,12 +982,25 @@ document.querySelectorAll('[data-tab]').forEach(b=>b.addEventListener('click',()
 let rz;window.addEventListener('resize',()=>{clearTimeout(rz);rz=setTimeout(()=>{if(S.tab==='progress'&&!typing())render();},250);});
 // Coming back to the tab: pick up a new date and any files changed elsewhere (another PC, or Claude writing a review).
 window.addEventListener('online',()=>{if(store&&Object.keys(saveQ).length)A.retry();});
-document.addEventListener('visibilitychange',async()=>{
-  if(document.hidden||!store) return;
-  if(!Object.keys(saveQ).length&&!typing()){try{await loadAll();}catch(e){console.warn('reload failed',e);}}
-  if(todayStr()!==S.date) ensureTimeline();
-  if(!typing()) render();
-});
+// Pull changes made on other devices: when the app comes back to the front, and every 45 s while it is open
+// (only when nothing is waiting to be saved and nobody is typing, so local edits are never overwritten).
+let refreshing=false;
+async function refreshFromStore(){
+  if(document.hidden||!store||refreshing) return;
+  if(Object.keys(saveQ).length||typing()) return;
+  refreshing=true;
+  try{
+    const before=JSON.stringify([...S.days.entries(),...S.weeks.entries(),...S.meta.entries()]);
+    if((await loadAll(true))===false){refreshing=false;return;}
+    if(todayStr()!==S.date) ensureTimeline();
+    const after=JSON.stringify([...S.days.entries(),...S.weeks.entries(),...S.meta.entries()]);
+    if(before!==after&&!typing()&&!Object.keys(saveQ).length) render();
+  }catch(e){console.warn('refresh failed',e);}
+  refreshing=false;
+}
+document.addEventListener('visibilitychange',()=>{if(!document.hidden){if(todayStr()!==S.date&&store){ensureTimeline();render();}refreshFromStore();}});
+window.addEventListener('focus',refreshFromStore);
+setInterval(refreshFromStore,45*1000);
 setInterval(checkDate,5*60*1000);
 
 const A={
@@ -1069,8 +1085,10 @@ document.addEventListener('click',e=>{const a=e.target.closest('[data-act]');if(
 
 /* ---------- boot ---------- */
 // Reads every collection into fresh maps first, so a failed read never wipes what is on screen.
-async function loadAll(){
+// With background=true the swap is skipped if the user started editing while files were being read.
+async function loadAll(background){
   const next={};for(const c of COLS){next[c]=new Map();for(const {id,data} of await store.all(c))next[c].set(id,data);}
+  if(background&&(Object.keys(saveQ).length||typing())) return false;
   for(const c of COLS)S[c]=next[c];
   for(const d of S.days.values())normDay(d);
   for(const w of S.weeks.values())normWeek(w);
