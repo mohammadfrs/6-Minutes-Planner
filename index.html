@@ -232,6 +232,7 @@ textarea.code{width:100%;min-height:140px;font-family:ui-monospace,Consolas,mono
       <button data-tab="progress">Progress</button>
       <button data-tab="me">Vision &amp; values</button>
       <button data-tab="history">Archive</button>
+      <button data-tab="settings">Settings</button>
     </nav>
   </div>
 </header>
@@ -315,7 +316,7 @@ const IDB={
 /* ---------- state ---------- */
 const S={days:new Map(),weeks:new Map(),meta:new Map(),reviews:new Map(),tab:'day',cur:null,weekMon:null,
   unlocked:new Set(),range:30,confirm:false,restore:null,restoreMsg:'',
-  backupMsg:'',copyText:'',date:null,dir:null,savedDir:null,connectMsg:'',needLogin:false,flash:'',settings:null,settingsMsg:''};
+  backupMsg:'',copyText:'',date:null,dir:null,savedDir:null,connectMsg:'',needLogin:false,flash:'',sub:'',lastSync:0,syncing:false,syncMsg:'',folderMsg:'',settings:null,settingsMsg:''};
 
 /* ---------- models ---------- */
 const arr=(a,n,f)=>{a=Array.isArray(a)?a.slice():[];while(a.length<n)a.push(typeof f==='function'?f():f);return a;};
@@ -417,9 +418,10 @@ async function graph(path,opts={}){
 async function pool(items,n,fn){let i=0;await Promise.all([...Array(Math.min(n,items.length))].map(async()=>{while(i<items.length){const it=items[i++];await fn(it);}}));}
 function graphStore(){
   const enc=p=>p.split('/').map(encodeURIComponent).join('/');
-  const root='/me/drive/special/approot:/';
-  let cache={};try{cache=JSON.parse(localStorage.getItem('smj6:gcache')||'{}');}catch(e){}
-  const keep=()=>{try{localStorage.setItem('smj6:gcache',JSON.stringify(cache));}catch(e){}};
+  const root='/me/drive/special/approot:/'+(S.sub?enc(S.sub)+'/':'');
+  const cacheKey='smj6:gcache'+(S.sub?':'+S.sub:'');
+  let cache={};try{cache=JSON.parse(localStorage.getItem(cacheKey)||'{}');}catch(e){}
+  const keep=()=>{try{localStorage.setItem(cacheKey,JSON.stringify(cache));}catch(e){}};
   async function put(rel,text){
     const r=await graph(`${root}${enc(rel)}:/content`,{method:'PUT',headers:{'Content-Type':'text/plain'},body:text});
     if(!r.ok) throw new Error('OneDrive save failed ('+r.status+')');
@@ -649,7 +651,7 @@ function render(){
   document.querySelectorAll('[data-tab]').forEach(b=>b.setAttribute('aria-current',b.dataset.tab===S.tab?'page':'false'));
   const v=S.tab, m=$('#main');
   if(!store){m.innerHTML=viewConnect();return;}
-  m.innerHTML=(v==='week'?viewWeek():v==='me'?viewMe():v==='history'?viewHistory():v==='progress'?viewProgress():viewDay());
+  m.innerHTML=(v==='week'?viewWeek():v==='me'?viewMe():v==='history'?viewHistory():v==='progress'?viewProgress():v==='settings'?viewSettings():viewDay());
 }
 const banner=()=>'';
 function viewConnect(){
@@ -818,8 +820,44 @@ function viewHistory(){
         ${s.journaled?`<span class="sc ${cls}">${s.score}</span>`:'<span class="small muted">empty</span>'}</button>`;}).join('')}</div>`;
   }
   h+=`</article>`;
+  h+=`<article class="sheet"><div class="dhead"><span class="label">Backup</span><h1 class="date">Snapshots &amp; import</h1>
+    <p class="muted">A snapshot puts the whole journal into one file in <code>backups</code>. Import loads a snapshot or a backup from an earlier version. The folder and sync settings are in <button class="linkbtn" data-act="tab" data-tab="settings">Settings</button>.</p></div>
+    <div class="row"><button class="btn" data-act="backup">Save snapshot</button><label class="ghost small" style="display:inline-flex;align-items:center;cursor:pointer">Import from file<input type="file" id="restoreFile" accept=".json,application/json" hidden></label></div>
+    ${S.backupMsg?`<p class="small">${esc(S.backupMsg)}</p>`:''}
+    ${S.restore?`<div class="confirm"><p>Backup from ${esc(S.restore.at||'unknown date')} with ${S.restore.counts}. Pages with the same date are replaced by the backup version. Other pages stay.</p><div class="row"><button class="btn danger" data-act="restore-yes">Restore backup</button><button class="ghost" data-act="restore-no">Cancel</button></div></div>`:''}
+    ${S.restoreMsg?`<p class="small">${esc(S.restoreMsg)}</p>`:''}</article>`;
+  return h;
+}
+
+function folderLabel(){
+  if(CLOUD_MODE) return 'OneDrive › Apps › 6-Minute Journal'+(S.sub?' › '+S.sub:'');
+  return S.dir?(S.dir.path||S.dir.name):'';
+}
+function viewSettings(){
+  const when=S.lastSync?new Date(S.lastSync).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',second:'2-digit'}):'not yet';
+  let h=banner();
+  // Storage
+  h+=`<article class="sheet"><div class="dhead"><span class="label">Storage</span><h1 class="date">Journal folder</h1>
+    <p class="muted">Currently used: <strong>${esc(folderLabel())}</strong></p></div>`;
+  if(CLOUD_MODE) h+=`<p class="small muted">The web app may only use its own OneDrive folder <code>Apps › 6-Minute Journal</code>. Inside it you can keep separate journals in subfolders, for example one per year. Leave the field empty for the main journal. Set the same name on every device that should show this journal.</p>
+    <div class="row"><input class="line" style="max-width:18rem" type="text" id="subFolder" value="${esc(S.sub)}" placeholder="Main journal (no subfolder)" aria-label="Subfolder name"><button class="btn sec2" data-act="set-sub">Use this folder</button></div>`;
+  else if(NATIVE) h+=`<div class="row"><button class="btn sec2" data-act="connect" data-mode="pick">Change folder</button><button class="ghost small" data-act="open-folder">Open folder</button></div>`;
+  else h+=`<div class="row"><button class="btn sec2" data-act="connect" data-mode="pick">Change folder</button></div>
+    <p class="small muted">Choose a folder that contains a journal (with a <code>data</code> folder) or an empty folder to start a new one.</p>`;
+  if(S.folderMsg) h+=`<p class="small">${esc(S.folderMsg)}</p>`;
+  h+=`</article>`;
+  // Sync
+  h+=`<article class="sheet"><div class="dhead"><span class="label">Sync</span><h1 class="date">Sync now</h1>
+    <p class="muted">Saves any open changes and loads the latest version of every page${CLOUD_MODE?' from OneDrive, including changes made on your other devices':' from the folder'}. The journal also syncs on its own when you return to it and every 45 seconds.</p></div>
+    <div class="row"><button class="btn" data-act="sync" ${S.syncing?'disabled':''}>${S.syncing?'Syncing…':'Sync now'}</button><span class="small muted">Last synced: ${esc(when)}</span></div>
+    ${S.syncMsg?`<p class="small">${esc(S.syncMsg)}</p>`:''}</article>`;
+  // Account
+  if(CLOUD_MODE) h+=`<article class="sheet"><div class="dhead"><span class="label">Account</span><h1 class="date">Microsoft account</h1>
+    <p class="muted">Signed in as <strong>${esc(Auth.user?(Auth.user.name||Auth.user.username):'')}</strong>${Auth.user&&Auth.user.name?` (${esc(Auth.user.username)})`:''}.</p></div>
+    <div class="row"><button class="ghost small" data-act="signout">Sign out</button></div></article>`;
+  // Reminders (Windows program only)
   if(NATIVE&&S.settings){const st=S.settings;
-    h+=`<article class="sheet"><div class="dhead"><span class="label">Settings</span><h1 class="date">Reminders &amp; startup</h1>
+    h+=`<article class="sheet"><div class="dhead"><span class="label">Reminders</span><h1 class="date">Reminders &amp; startup</h1>
       <p class="muted">The journal waits next to the clock (system tray) and shows a Windows notification at these times. Click the notification to open the journal.</p></div>
       <div class="habits">
         <label><input type="checkbox" data-set="Reminders" ${st.Reminders?'checked':''}> Remind me twice a day</label>
@@ -829,15 +867,6 @@ function viewHistory(){
         <label><input type="checkbox" data-set="StartWithWindows" ${st.StartWithWindows?'checked':''}> Start with Windows (in the tray, so reminders work)</label>
         <label><input type="checkbox" data-set="CloseToTray" ${st.CloseToTray?'checked':''}> Keep running in the tray when I close the window</label>
       </div>${S.settingsMsg?`<p class="small">${esc(S.settingsMsg)}</p>`:''}</article>`;}
-  h+=`<article class="sheet"><div class="dhead"><span class="label">Files</span><h1 class="date">Your journal folder</h1>
-    <p class="muted">Everything is saved in <strong>${esc(S.dir?(S.dir.path||S.dir.name):'')}</strong>: <code>data</code> holds one file per day and week, <code>pages</code> holds a readable copy of every day that you can open on your phone in the OneDrive app.</p>
-    <p class="muted">A snapshot puts the whole journal into one file in <code>backups</code>. Import loads a snapshot or a backup from an earlier version.</p></div>
-    ${NATIVE?`<div class="row"><button class="ghost small" data-act="open-folder">Open folder</button><button class="ghost small" data-act="connect" data-mode="pick">Change folder</button></div>`:''}
-    ${CLOUD_MODE?`<p class="small muted">Signed in as <strong>${esc(Auth.user?(Auth.user.name||Auth.user.username):'')}</strong>${Auth.user&&Auth.user.name?` (${esc(Auth.user.username)})`:''}.</p><div class="row"><button class="ghost small" data-act="signout">Sign out</button></div>`:''}
-    <div class="row"><button class="btn" data-act="backup">Save snapshot</button><label class="ghost small" style="display:inline-flex;align-items:center;cursor:pointer">Import from file<input type="file" id="restoreFile" accept=".json,application/json" hidden></label></div>
-    ${S.backupMsg?`<p class="small">${esc(S.backupMsg)}</p>`:''}
-    ${S.restore?`<div class="confirm"><p>Backup from ${esc(S.restore.at||'unknown date')} with ${S.restore.counts}. Pages with the same date are replaced by the backup version. Other pages stay.</p><div class="row"><button class="btn danger" data-act="restore-yes">Restore backup</button><button class="ghost" data-act="restore-no">Cancel</button></div></div>`:''}
-    ${S.restoreMsg?`<p class="small">${esc(S.restoreMsg)}</p>`:''}</article>`;
   return h;
 }
 
@@ -992,6 +1021,7 @@ async function refreshFromStore(){
   try{
     const before=JSON.stringify([...S.days.entries(),...S.weeks.entries(),...S.meta.entries()]);
     if((await loadAll(true))===false){refreshing=false;return;}
+    S.lastSync=Date.now();
     if(todayStr()!==S.date) ensureTimeline();
     const after=JSON.stringify([...S.days.entries(),...S.weeks.entries(),...S.meta.entries()]);
     if(before!==after&&!typing()&&!Object.keys(saveQ).length) render();
@@ -1054,6 +1084,26 @@ const A={
     render();},
   async 'open-folder'(){try{await NATIVE.OpenFolder();}catch(e){}},
   async signin(){parkPending();await Auth.login();},
+  // Settings → Sync now: write everything that is waiting, then reload every page from storage.
+  async sync(){
+    S.syncing=true;S.syncMsg='';render();
+    for(const k of Object.keys(saveQ)){const [c,id]=k.split('/');saveQ[k].failed=false;flush(c,id);}
+    for(let i=0;i<100&&Object.keys(saveQ).length&&!Object.values(saveQ).some(q=>q.failed);i++) await new Promise(r=>setTimeout(r,100));
+    if(Object.keys(saveQ).length){S.syncing=false;S.syncMsg=CLOUD_MODE&&S.needLogin?'Your sign-in expired. Sign in again, then sync.':'Some changes could not be saved yet. Check the connection and try again.';render();return;}
+    try{await loadAll();ensureTimeline();S.lastSync=Date.now();S.syncMsg=`Synced: ${S.days.size} day pages, ${S.weeks.size} weeks.`;}
+    catch(e){S.syncMsg=CLOUD_MODE?'OneDrive could not be reached. Check the internet connection and try again.':'The folder could not be read. Check that it still exists.';}
+    S.syncing=false;render();
+  },
+  // Settings → subfolder inside the OneDrive app folder (web app only).
+  async 'set-sub'(){
+    const el=$('#subFolder');const v=(el&&el.value||'').trim();
+    if(v&&!/^[\w\- ]{1,60}$/.test(v)){S.folderMsg='Use letters, digits, spaces, - or _ only (no slashes).';render();return;}
+    if(v===S.sub){S.folderMsg='This folder is already in use.';render();return;}
+    if(Object.keys(saveQ).length){S.folderMsg='Wait a moment until all changes are saved.';render();return;}
+    S.sub=v;lsSet('smj6:sub',v);S.unlocked.clear();
+    await openFolder({name:'OneDrive',path:folderLabel()});
+    S.folderMsg=`Now using ${folderLabel()}.`;S.tab='settings';render();
+  },
   signout(){Auth.signOut();},
   async connect(a){
     S.connectMsg='';
@@ -1102,10 +1152,12 @@ async function openFolder(h){
       :'The folder could not be read. Choose the Daily Plans folder again.';
     render();return;}
   if(CLOUD_MODE) restorePending();
+  S.lastSync=Date.now();
   ensureTimeline();refreshStatus();render();
 }
 async function boot(){
-  const t=lsGet('smj6:tab');if(t&&['day','week','progress','me','history'].includes(t))S.tab=t;
+  const t=lsGet('smj6:tab');if(t&&['day','week','progress','me','history','settings'].includes(t))S.tab=t;
+  S.sub=lsGet('smj6:sub')||'';
   if(CLOUD_MODE){
     if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
     Auth.load();
@@ -1120,7 +1172,6 @@ async function boot(){
     return render();
   }
   if(NATIVE){
-    $('[data-tab="history"]').textContent='Archive & settings';
     try{S.settings=JSON.parse(await NATIVE.GetSettings());const f=await NATIVE.GetFolder();
       if(f) return openFolder({name:f.split('\\').pop(),path:f});}
     catch(e){console.warn('host not ready',e);S.connectMsg='The journal folder could not be read. Choose it again.';}
