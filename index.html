@@ -123,6 +123,10 @@ input[type=checkbox]{width:20px;height:20px;accent-color:var(--accent);margin:0}
 .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .finish{border-top:1px solid var(--line);padding-top:16px;display:flex;flex-direction:column;gap:10px}
 .confirm{background:var(--accent-soft);border-radius:4px;padding:12px 14px;display:flex;flex-direction:column;gap:10px}
+.editbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;border:1px solid var(--line);border-radius:4px;padding:10px 14px;background:var(--paper)}
+.editbar.editing{border-color:var(--gold);background:var(--gold-soft)}
+.editbar>div{min-width:0;flex:1 1 16rem}
+.flash{margin:0;padding:8px 14px;border-radius:4px;background:var(--good-soft);color:var(--good);font-weight:600;font-size:.9rem}
 .score-line{display:flex;align-items:baseline;gap:8px;font-variant-numeric:tabular-nums}
 .score-line strong{font-family:var(--f-display);font-size:1.6rem}
 .empty{display:flex;flex-direction:column;gap:12px;align-items:flex-start;padding:10px 0}
@@ -308,7 +312,7 @@ const IDB={
 /* ---------- state ---------- */
 const S={days:new Map(),weeks:new Map(),meta:new Map(),reviews:new Map(),tab:'day',cur:null,weekMon:null,
   unlocked:new Set(),range:30,confirm:false,restore:null,restoreMsg:'',
-  backupMsg:'',copyText:'',date:null,dir:null,savedDir:null,connectMsg:'',needLogin:false,settings:null,settingsMsg:''};
+  backupMsg:'',copyText:'',date:null,dir:null,savedDir:null,connectMsg:'',needLogin:false,flash:'',settings:null,settingsMsg:''};
 
 /* ---------- models ---------- */
 const arr=(a,n,f)=>{a=Array.isArray(a)?a.slice():[];while(a.length<n)a.push(typeof f==='function'?f():f);return a;};
@@ -691,7 +695,11 @@ function viewDay(){
   const s=dayStats(d,p.habits);
   const sec=(n,title,sub,body,eve)=>`<section class="sec ${eve?'eve':''}"><span class="num">${n}</span><div class="sec-b"><div class="sec-h"><h3>${title}${sub?`<small>${sub}</small>`:''}</h3></div>${body}</div></section>`;
 
-  let html=banner()+`<article class="sheet">${head}
+  const edited=d.editedAt?`<span class="small muted">Last changed after archiving: ${esc(new Date(d.editedAt).toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}))}.</span>`:'';
+  const editBar=d.status!=='closed'?'':locked
+    ?`<div class="editbar"><div><strong>This page is archived.</strong> ${edited||'<span class="small muted">You can still correct or complete it.</span>'}</div><button class="btn sec2" data-act="unlock">Edit page</button></div>`
+    :`<div class="editbar editing"><div><strong>Editing an archived page.</strong> <span class="small muted">Changes save automatically; click Save when you are done.</span></div><button class="btn" data-act="lock">Save</button></div>`;
+  let html=banner()+`<article class="sheet">${head}${editBar}${S.flash?`<p class="flash">${esc(S.flash)}</p>`:''}
   <div class="part"><span class="label">Morning · plan the day</span>${s.morning?'<span class="chip ok">Planned</span>':''}</div>`;
   html+=sec(1,'I am grateful for','',d.grateful.map((g,i)=>line(`grateful.${i}`,g,i===0?'Something or someone that made life better':'…','Grateful for '+(i+1))).join(''));
   html+=sec(2,'I am looking forward to','',d.forward.map((g,i)=>line(`forward.${i}`,g,i===0?'A moment you will enjoy today':'…','Looking forward to '+(i+1))).join(''));
@@ -715,12 +723,12 @@ function viewDay(){
   html+=sec(8,'Habit tracker','',p.habits.length?`<div class="habits">${p.habits.map(h=>`<label><input type="checkbox" ${b('habits.'+h.id)} data-rerender ${d.habits[h.id]?'checked':''} ${dis}> ${esc(h.name||'Unnamed habit')}</label>`).join('')}</div>`
     :`<p class="small muted">No habits yet.</p><button class="linkbtn" data-act="tab" data-tab="me" data-anchor="habits">Add habits to track</button>`,true);
   html+=`<div class="finish"><div class="score-line"><span class="label">Day score</span><strong>${s.score}</strong><span class="muted small">/ 100 · focus 40, tasks 2 and 3: 20, relax 15${p.habits.length?', habits 15':''}, reflection 10</span></div>`;
-  if(locked) html+=`<div class="row"><button class="btn sec2" data-act="unlock">Edit this page</button><span class="small muted">Archived pages are locked so your record stays honest.</span></div>`;
+  if(locked) html+=`<div class="row"><button class="btn sec2" data-act="unlock">Edit page</button><span class="small muted">Archived pages are locked against accidental changes.</span></div>`;
   else if(date<=t&&d.status==='open'){
     html+=S.confirm?`<div class="confirm"><p>Lock this page and open tomorrow's page? Unfinished tasks move to tomorrow.</p><div class="row"><button class="btn" data-act="finish-yes">Finish day</button><button class="ghost" data-act="finish-no">Cancel</button></div></div>`
       :`<div class="row"><button class="btn" data-act="finish">Finish day &amp; prepare tomorrow</button><span class="small muted">Do this in the evening after steps 7 and 8.</span></div>`;
   } else if(date>t) html+=`<p class="small muted">Prepared in advance. This page becomes today's page in the morning.</p>`;
-  else if(d.status==='closed') html+=`<div class="row"><button class="ghost small" data-act="lock">Done editing</button></div>`;
+  else if(d.status==='closed') html+=`<div class="row"><button class="btn" data-act="lock">Save</button><span class="small muted">Saves your changes and locks the page again.</span></div>`;
   html+=`</div></article>`;
   return html;
 }
@@ -944,6 +952,7 @@ document.addEventListener('input',e=>{
   const doc=S[col].get(id);if(!doc)return;
   const val=el.type==='checkbox'?el.checked:el.value;
   setPath(doc,path,val);
+  if(col==='days'&&doc.status==='closed') doc.editedAt=Date.now();
   scheduleSave(col,id,el.type==='checkbox'||el.tagName==='SELECT'?150:700);
   if('rerender' in el.dataset) render();
 });
@@ -980,18 +989,25 @@ setInterval(checkDate,5*60*1000);
 
 const A={
   tab(a){S.tab=a.dataset.tab;lsSet('smj6:tab',S.tab);render();if(a.dataset.anchor){const el=document.getElementById(a.dataset.anchor);if(el)el.scrollIntoView();}else window.scrollTo(0,0);},
-  'day-go'(a){S.cur=addDays(S.cur,+a.dataset.d);S.confirm=false;render();},
-  'day-today'(){S.cur=S.date;S.confirm=false;render();},
+  'day-go'(a){S.cur=addDays(S.cur,+a.dataset.d);S.confirm=false;S.flash='';render();},
+  'day-today'(){S.cur=S.date;S.confirm=false;S.flash='';render();},
   'day-create'(){const d=newDay(S.cur);if(S.cur<S.date){d.status='closed';S.unlocked.add(S.cur);}S.days.set(S.cur,d);scheduleSave('days',S.cur,50);render();},
-  'open-day'(a){S.cur=a.dataset.date;S.tab='day';S.confirm=false;render();window.scrollTo(0,0);},
+  'open-day'(a){S.cur=a.dataset.date;S.tab='day';S.confirm=false;S.flash='';render();window.scrollTo(0,0);},
   'open-week'(a){S.weekMon=a.dataset.m;S.tab='week';render();window.scrollTo(0,0);},
   add(a){const d=S.days.get(S.cur);d[a.dataset.list].push(a.dataset.list==='relax'?{text:'',done:false}:todo());scheduleSave('days',S.cur,300);render();
     const ins=document.querySelectorAll(`[data-b^="days/${S.cur}/${a.dataset.list}."][type=text]`);if(ins.length)ins[ins.length-1].focus();},
   'del-item'(a){const d=S.days.get(S.cur);d[a.dataset.list].splice(+a.dataset.i,1);scheduleSave('days',S.cur,150);render();},
   rate(a){const d=S.days.get(S.cur);const n=+a.dataset.n;d.evening.rating=d.evening.rating===n?0:n;scheduleSave('days',S.cur,150);render();},
   wrate(a){const wid=isoWeek(S.weekMon);const w=S.weeks.get(wid);const n=+a.dataset.n;w.reflection.rating=w.reflection.rating===n?0:n;scheduleSave('weeks',wid,150);render();},
-  unlock(){S.unlocked.add(S.cur);render();},
-  lock(){S.unlocked.delete(S.cur);render();},
+  unlock(){S.unlocked.add(S.cur);S.flash='';render();},
+  // Save on an archived page: write pending changes now, wait for them, then lock the page again.
+  async lock(){
+    const date=S.cur, k='days/'+date;
+    if(saveQ[k]){flush('days',date);for(let i=0;i<50&&saveQ[k]&&!saveQ[k].failed;i++) await new Promise(r=>setTimeout(r,100));}
+    if(saveQ[k]&&saveQ[k].failed){S.flash='Not saved yet. Check the connection, then click Save again.';render();return;}
+    S.unlocked.delete(date);S.flash='Changes saved. The page for '+fmtShort(date)+' is updated.';render();
+    setTimeout(()=>{if(S.flash.startsWith('Changes saved')){S.flash='';if(!typing())render();}},4000);
+  },
   finish(){S.confirm=true;render();},
   'finish-no'(){S.confirm=false;render();},
   'finish-yes'(){const date=S.cur,d=S.days.get(date),next=addDays(date,1);
