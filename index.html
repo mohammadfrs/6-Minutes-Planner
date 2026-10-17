@@ -350,7 +350,7 @@ const NATIVE=(window.chrome&&window.chrome.webview&&window.chrome.webview.hostOb
 /* ---------- web app: Microsoft sign-in + OneDrive app folder ----------
    Used when the page is served over https (GitHub Pages) and a client ID is configured.
    Each user's journal lives in their own OneDrive at Apps/<app name>/, same layout as the Windows app folder. */
-const CLOUD={clientId:'__CLIENT_ID__',authority:'https://login.microsoftonline.com/common/oauth2/v2.0',
+const CLOUD={clientId:'8b0e5366-6e9a-48c1-930b-9553783f2e0b',authority:'https://login.microsoftonline.com/common/oauth2/v2.0',
   scopes:'openid profile offline_access Files.ReadWrite.AppFolder'};
 const CLOUD_MODE=!NATIVE&&location.protocol==='https:'&&!CLOUD.clientId.startsWith('__');
 const REDIRECT=location.origin+location.pathname.replace(/index\.html$/,'');
