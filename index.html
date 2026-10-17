@@ -1,0 +1,1104 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>6-Minute Journal</title>
+<meta name="theme-color" content="#1f5a66">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Journal">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Literata:opsz,wght@7..72,400;7..72,600;7..72,700&display=swap">
+<style>
+/* Layout: one centred journal sheet (max 46rem) under a sticky header with a tab strip; sections numbered like the book's 8-step routine */
+:root{
+  --paper:#eceff0; --sheet:#fbfcfb; --ink:#1c2427; --muted:#5b676a; --line:#d3d9da; --rule:#e2e7e8;
+  --accent:#1f5a66; --accent-ink:#ffffff; --accent-soft:#dbe9ec; --gold:#9c6a12; --gold-soft:#f3e7cc;
+  --good:#2c7748; --good-soft:#dcefe2; --warn:#a8591a; --bad:#a3303d; --bad-soft:#f6dfe2;
+  --f-display:"Literata",Georgia,"Times New Roman",serif;
+  --f-body:"Figtree",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --paper:#111618; --sheet:#182023; --ink:#e4eaeb; --muted:#97a4a7; --line:#2b3639; --rule:#243033;
+  --accent:#74b4c0; --accent-ink:#0d1a1d; --accent-soft:#1d3237; --gold:#d8a94c; --gold-soft:#3a2f18;
+  --good:#6cc18c; --good-soft:#1b3326; --warn:#e2995a; --bad:#e3788a; --bad-soft:#3a1d22; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --paper:#111618; --sheet:#182023; --ink:#e4eaeb; --muted:#97a4a7; --line:#2b3639; --rule:#243033;
+  --accent:#74b4c0; --accent-ink:#0d1a1d; --accent-soft:#1d3237; --gold:#d8a94c; --gold-soft:#3a2f18;
+  --good:#6cc18c; --good-soft:#1b3326; --warn:#e2995a; --bad:#e3788a; --bad-soft:#3a1d22; color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--paper);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.5}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--paper);border-bottom:1px solid var(--line)}
+.top-in{max-width:46rem;margin:0 auto;padding:10px 16px 0;display:flex;flex-direction:column;gap:6px}
+.brand{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.brand b{font-family:var(--f-display);font-size:1.15rem;font-weight:600;letter-spacing:-.01em}
+.brand b span{color:var(--accent)}
+.status{border:0;background:transparent;font-size:.78rem;color:var(--muted);padding:4px 0;cursor:default;white-space:nowrap}
+.status[data-s="error"]{color:var(--bad);cursor:pointer;text-decoration:underline}
+.status[data-s="saving"]{color:var(--gold)}
+.tabs{display:flex;gap:2px;overflow-x:auto;scrollbar-width:none;margin:0 -4px}
+.tabs::-webkit-scrollbar{display:none}
+.tabs button{border:0;background:none;padding:8px 12px 10px;font-weight:600;font-size:.92rem;color:var(--muted);border-bottom:2px solid transparent;cursor:pointer;white-space:nowrap}
+.tabs button[aria-current="page"]{color:var(--ink);border-bottom-color:var(--accent)}
+
+.wrap{max-width:46rem;margin:0 auto;padding-inline:16px;padding-block:18px 64px;display:flex;flex-direction:column;gap:16px}
+.loading{color:var(--muted);text-align:center;padding:40px 0}
+.sheet{background:var(--sheet);border:1px solid var(--line);border-radius:4px;padding:20px 18px;display:flex;flex-direction:column;gap:22px;min-width:0}
+.banner{border:1px solid var(--gold);background:var(--gold-soft);border-radius:4px;padding:10px 14px;font-size:.88rem}
+
+h1,h2,h3{font-family:var(--f-display);font-weight:600;text-wrap:balance;margin:0;letter-spacing:-.01em}
+h2{font-size:1.35rem}
+h3{font-size:1.02rem}
+p{margin:0}
+.muted{color:var(--muted)}
+.small{font-size:.84rem}
+.label{font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600}
+
+/* day head */
+.dhead{display:flex;flex-direction:column;gap:8px}
+.wd{list-style:none;margin:0;padding:0;display:flex;gap:6px}
+.wd li{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font-size:.75rem;font-weight:600;color:var(--muted);border:1px solid transparent}
+.wd li.on{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.date{font-size:1.6rem;line-height:1.2}
+.drow{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.chip{display:inline-flex;align-items:center;gap:4px;border-radius:999px;padding:2px 10px;font-size:.75rem;font-weight:600;background:var(--accent-soft);color:var(--accent)}
+.chip.locked{background:var(--rule);color:var(--muted)}
+.chip.ok{background:var(--good-soft);color:var(--good)}
+.chip.gold{background:var(--gold-soft);color:var(--gold)}
+.quote{margin:0;padding:10px 0 0;border-top:1px solid var(--rule)}
+.quote p{font-family:var(--f-display);font-style:italic;font-size:1rem}
+.quote cite{font-style:normal;font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.daynav{display:flex;gap:6px;align-items:center}
+
+/* numbered sections */
+.sec{display:grid;grid-template-columns:30px minmax(0,1fr);gap:4px 10px}
+.num{width:24px;height:24px;border-radius:50%;border:1.5px solid var(--accent);color:var(--accent);display:grid;place-items:center;font-size:.78rem;font-weight:700;margin-top:2px;font-variant-numeric:tabular-nums}
+.sec.eve .num{border-color:var(--gold);color:var(--gold)}
+.sec-b{display:flex;flex-direction:column;gap:4px;min-width:0}
+.sec-h{display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.sec-h h3 small{font-family:var(--f-body);font-weight:500;font-size:.8rem;color:var(--muted);margin-left:6px}
+.part{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 0 2px;border-top:1px dashed var(--line)}
+.part:first-of-type{border-top:0}
+
+input.line,select.line{width:100%;border:0;border-bottom:1px solid var(--rule);background:transparent;padding:7px 2px;font-size:16px;border-radius:0;min-width:0}
+input.line:focus{border-bottom-color:var(--accent);outline:none}
+select.line{padding:6px 2px;color:var(--ink)}
+textarea.lined{width:100%;border:0;resize:vertical;font-size:16px;line-height:32px;padding:0 2px;min-height:96px;background-color:transparent;
+  background-image:repeating-linear-gradient(to bottom,transparent 0,transparent 31px,var(--rule) 31px,var(--rule) 32px);background-attachment:local}
+textarea.lined:focus{outline:none;background-image:repeating-linear-gradient(to bottom,transparent 0,transparent 31px,var(--accent-soft) 31px,var(--accent-soft) 32px)}
+:disabled{opacity:1}
+input:disabled,textarea:disabled,select:disabled{color:var(--ink);-webkit-text-fill-color:var(--ink)}
+
+.item{display:flex;align-items:center;gap:8px;min-width:0}
+.item input[type=checkbox]{flex:none}
+.item.done input.line{text-decoration:line-through;color:var(--muted);-webkit-text-fill-color:var(--muted)}
+input[type=checkbox]{width:20px;height:20px;accent-color:var(--accent);margin:0}
+.carried{flex:none;font-size:.72rem;font-weight:700;color:var(--gold);background:var(--gold-soft);border-radius:999px;padding:1px 7px;font-variant-numeric:tabular-nums}
+.x{flex:none;border:0;background:none;color:var(--muted);font-size:1.2rem;width:28px;height:28px;cursor:pointer;border-radius:50%}
+.x:hover{background:var(--rule)}
+.focus-box{border:1.5px solid var(--accent);border-radius:4px;padding:6px 10px 10px;display:flex;flex-direction:column;gap:6px}
+.focus-box .item input.line{font-weight:600;border-bottom:0}
+.tags{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.tags label{display:flex;flex-direction:column;font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:600;min-width:0}
+
+.rating{display:flex;gap:6px;flex-wrap:wrap}
+.rating button{width:38px;height:38px;border-radius:50%;border:1px solid var(--line);background:var(--sheet);cursor:pointer;font-weight:700;font-variant-numeric:tabular-nums}
+.rating button[aria-pressed="true"]{background:var(--gold);border-color:var(--gold);color:var(--sheet)}
+.habits{display:flex;flex-direction:column;gap:6px}
+.habits label{display:flex;gap:10px;align-items:center}
+
+.btn{border:0;background:var(--accent);color:var(--accent-ink);padding:10px 16px;border-radius:4px;font-weight:600;cursor:pointer}
+.btn:disabled{opacity:.5;cursor:default}
+.btn.sec2{background:var(--accent-soft);color:var(--accent)}
+.btn.danger{background:var(--bad);color:var(--sheet)}
+.ghost{border:1px solid var(--line);background:var(--sheet);border-radius:4px;padding:6px 12px;cursor:pointer;font-weight:600;min-width:38px}
+.ghost:disabled{opacity:.4;cursor:default}
+.ghost.small{font-size:.85rem}
+.linkbtn{border:0;background:none;color:var(--accent);font-weight:600;cursor:pointer;padding:4px 0;font-size:.88rem}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.finish{border-top:1px solid var(--line);padding-top:16px;display:flex;flex-direction:column;gap:10px}
+.confirm{background:var(--accent-soft);border-radius:4px;padding:12px 14px;display:flex;flex-direction:column;gap:10px}
+.score-line{display:flex;align-items:baseline;gap:8px;font-variant-numeric:tabular-nums}
+.score-line strong{font-family:var(--f-display);font-size:1.6rem}
+.empty{display:flex;flex-direction:column;gap:12px;align-items:flex-start;padding:10px 0}
+
+/* week */
+.cal{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 16px}
+.cal label{display:flex;flex-direction:column;gap:2px;min-width:0}
+.cal textarea.lined{min-height:64px}
+.tablewrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+th,td{padding:6px 6px;text-align:center;border-bottom:1px solid var(--rule);font-size:.88rem}
+th:first-child,td:first-child{text-align:left}
+th{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:600}
+td.today-col,th.today-col{background:var(--accent-soft)}
+.wfocus{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.wfocus li{display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:8px;padding:7px 0;border-bottom:1px solid var(--rule);align-items:baseline}
+.wfocus li span:first-child{font-weight:700;color:var(--muted);font-size:.8rem}
+
+/* values */
+.vchips{display:flex;flex-wrap:wrap;gap:6px}
+.vchip{border:1px solid var(--line);background:var(--sheet);border-radius:999px;padding:5px 12px;font-size:.86rem;cursor:pointer}
+.vchip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.vchip.star[aria-pressed="true"]{background:var(--gold);border-color:var(--gold);color:var(--sheet)}
+.vchip:disabled{opacity:.4;cursor:default}
+.pairs{display:flex;flex-direction:column;gap:6px}
+.pair{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:center}
+.pair button{border:1px solid var(--line);background:var(--sheet);border-radius:4px;padding:8px;cursor:pointer;font-size:.88rem;min-width:0}
+.pair button[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);font-weight:700}
+.pair span{font-size:.75rem;color:var(--muted)}
+.rank{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.rank li{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--rule)}
+.rank .n{font-family:var(--f-display);font-weight:700;font-size:1.1rem;color:var(--accent)}
+.tally{font-family:var(--f-display);letter-spacing:.12em;color:var(--muted);font-size:.9rem;margin-left:8px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:4px;overflow:hidden}
+.seg button{border:0;background:var(--sheet);padding:5px 9px;font-size:.78rem;cursor:pointer;font-weight:600;color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+.area-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.area-grid label{display:flex;flex-direction:column;gap:2px;min-width:0}
+.area-grid .q{font-size:.8rem;color:var(--muted)}
+
+/* progress */
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.kpi{display:flex;flex-direction:column;gap:2px;padding:10px 0;border-top:2px solid var(--accent)}
+.kpi strong{font-family:var(--f-display);font-size:1.7rem;line-height:1.1;font-variant-numeric:tabular-nums}
+.kpi span{font-size:.78rem;color:var(--muted)}
+.chart{width:100%;height:auto;display:block}
+.chart .grid{stroke:var(--rule);stroke-width:1}
+.chart .axis{fill:var(--muted);font-size:11px;font-family:var(--f-body)}
+.chart .b-good{fill:var(--accent)}
+.chart .b-mid{fill:var(--gold)}
+.chart .b-low{fill:var(--bad)}
+.chart .miss{fill:var(--line)}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:.78rem;color:var(--muted)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+.hbar{display:grid;grid-template-columns:minmax(0,9rem) minmax(0,1fr) 3.2rem;gap:10px;align-items:center;font-size:.88rem;padding:4px 0}
+.hbar .track{height:10px;background:var(--rule);border-radius:2px;overflow:hidden}
+.hbar .fill{height:100%;background:var(--accent);border-radius:2px}
+.hbar .fill.warnf{background:var(--bad)}
+.hbar b{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
+.insights{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px}
+.insights li.bad::marker{color:var(--bad)}
+.insights li.good::marker{color:var(--good)}
+.dots{display:inline-flex;gap:3px}
+.dots i{width:9px;height:9px;border-radius:50%;background:var(--rule)}
+.dots i.on{background:var(--accent)}
+.ai-out{font-size:.95rem;display:flex;flex-direction:column;gap:8px;max-width:65ch}
+.ai-out h4{font-family:var(--f-display);font-size:1.02rem;margin:8px 0 0}
+.ai-out ul,.ai-out ol{margin:0;padding-left:20px}
+.err{color:var(--bad);font-size:.88rem}
+details summary{cursor:pointer;font-weight:600}
+
+/* history */
+.month{display:flex;flex-direction:column}
+.hrow{display:grid;grid-template-columns:70px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 4px;border:0;border-bottom:1px solid var(--rule);background:none;text-align:left;cursor:pointer;width:100%}
+.hrow:hover{background:var(--accent-soft)}
+.hrow .d{font-weight:700;font-variant-numeric:tabular-nums}
+.hrow .d small{display:block;font-weight:500;color:var(--muted);font-size:.75rem}
+.hrow .f{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sc{font-variant-numeric:tabular-nums;font-weight:700;border-radius:4px;padding:2px 8px;font-size:.82rem}
+.sc.g{background:var(--accent-soft);color:var(--accent)} .sc.m{background:var(--gold-soft);color:var(--gold)} .sc.l{background:var(--bad-soft);color:var(--bad)}
+textarea.code{width:100%;min-height:140px;font-family:ui-monospace,Consolas,monospace;font-size:12px;border:1px solid var(--line);background:var(--paper);padding:8px}
+
+@media (max-width:560px){
+  .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .area-grid,.cal{grid-template-columns:minmax(0,1fr)}
+  .tags{grid-template-columns:minmax(0,1fr)}
+  .sheet{padding:16px 14px}
+  .date{font-size:1.35rem}
+  .hbar{grid-template-columns:minmax(0,6.5rem) minmax(0,1fr) 3rem}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+<header class="top">
+  <div class="top-in">
+    <div class="brand"><b>6-Minute <span>Journal</span></b><button id="status" class="status" data-act="retry" data-s="idle"></button></div>
+    <nav class="tabs" aria-label="Sections">
+      <button data-tab="day">Day</button>
+      <button data-tab="week">Week</button>
+      <button data-tab="progress">Progress</button>
+      <button data-tab="me">Vision &amp; values</button>
+      <button data-tab="history">Archive</button>
+    </nav>
+  </div>
+</header>
+<main id="main" class="wrap"><p class="loading">Opening your journal…</p></main>
+
+<script>
+(()=>{
+'use strict';
+/* ---------- constants ---------- */
+const AREAS=[
+ ['body','Body & mind','How is my physical and mental health?'],
+ ['career','Education & career','Where do I stand at work? What am I learning?'],
+ ['family','Family & friends','How is my family? Which friends are with me?'],
+ ['attitude','Attitude','How do I approach life? What is my motto?'],
+ ['finance','Finances','How am I set up financially?'],
+ ['leisure','Leisure & fun','What do I do just for the joy of it?']];
+const AREA=Object.fromEntries(AREAS.map(a=>[a[0],a[1]]));
+const VALUES=['Adventure','Mindfulness','Activity','Acceptance','Reputation','Aesthetics','Authenticity','Balance','Enthusiasm','Modesty','Charm','Coolness','Gratitude','Directness','Effectiveness','Honour','Honesty','Simplicity','Insight','Empathy','Success','Excellence','Fairness','Imagination','Flexibility','Progress','Freedom','Patience','Composure','Health','Generosity','Challenge','Harmony','Humour','Innovation','Intelligence','Intuition','Creativity','Passion','Love','Loyalty','Sustainability','Compassion','Curiosity','Objectivity','Openness','Optimism','Perfection','Professionalism','Realism','Respect','Calm','Self-confidence','Security','Diligence','Spirituality','Fun','Strength','Team spirit','Tradition','Independence','Vitality','Responsibility','Reliability','Trust','Forgiveness','Wisdom','Willpower','Prosperity','Belonging','Determination'];
+const QUOTES=[
+ ['The successful warrior is the average man, with laser-like focus.','Bruce Lee'],
+ ['The art of resting is a part of the art of working.','John Steinbeck'],
+ ['Nothing happens without risk, but without risk nothing happens.','Walter Scheel'],
+ ['Well done is better than well said.','Benjamin Franklin'],
+ ['It always seems impossible until it is done.','Nelson Mandela'],
+ ['The best way out is always through.','Robert Frost'],
+ ['Do what you can, with what you have, where you are.','Theodore Roosevelt'],
+ ['We are what we repeatedly do.','Will Durant'],
+ ['Nothing will work unless you do.','Maya Angelou'],
+ ['Energy and persistence conquer all things.','Benjamin Franklin'],
+ ['Knowing is not enough; we must apply.','J. W. von Goethe'],
+ ['The journey of a thousand miles begins with one step.','Lao Tzu'],
+ ['Rest is not idleness.','John Lubbock'],
+ ['Focus on being productive instead of busy.','Tim Ferriss'],
+ ['Done is better than perfect.','Sheryl Sandberg'],
+ ['Whatever you are, be a good one.','Abraham Lincoln'],
+ ['Happiness is not something ready made. It comes from your own actions.','Dalai Lama'],
+ ['Vision is the art of seeing what is invisible to others.','Jonathan Swift'],
+ ['Life can only be understood backwards; but it must be lived forwards.','Søren Kierkegaard'],
+ ['He who has a why to live can bear almost any how.','Friedrich Nietzsche'],
+ ['Small deeds done are better than great deeds planned.','Peter Marshall'],
+ ['Start where you are. Use what you have. Do what you can.','Arthur Ashe'],
+ ['You cannot lengthen or widen your life, only deepen it.','Gorch Fock'],
+ ['Visions are the archive of the future.','Thom Renzie'],
+ ['Simplicity is the ultimate sophistication.','Leonardo da Vinci'],
+ ['Courage is grace under pressure.','Ernest Hemingway'],
+ ['What gets measured gets managed.','Peter Drucker'],
+ ['Little by little, one travels far.','J. R. R. Tolkien'],
+ ['Action is the foundational key to all success.','Pablo Picasso'],
+ ['Quality is not an act, it is a habit.','Will Durant']];
+const WD=['M','T','W','T','F','S','S'];
+const CAL=[['mon','Monday'],['tue','Tuesday'],['wed','Wednesday'],['thu','Thursday'],['fri','Friday'],['wkd','Saturday / Sunday']];
+const COLS=['days','weeks','meta','reviews'];
+
+/* ---------- helpers ---------- */
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const filled=v=>String(v??'').trim().length>0;
+const pad=n=>String(n).padStart(2,'0');
+const ymd=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const parse=s=>{const [y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d);};
+const addDays=(s,n)=>{const d=parse(s);d.setDate(d.getDate()+n);return ymd(d);};
+const todayStr=()=>ymd(new Date());
+const dow=s=>(parse(s).getDay()+6)%7;
+const mondayOf=s=>addDays(s,-dow(s));
+const dayIndex=s=>Math.round(parse(s).getTime()/864e5);
+function isoWeek(s){const d=parse(s);d.setDate(d.getDate()+3-((d.getDay()+6)%7));const w1=new Date(d.getFullYear(),0,4);
+  const wk=1+Math.round(((d-w1)/864e5-3+((w1.getDay()+6)%7))/7);return `${d.getFullYear()}-W${pad(wk)}`;}
+const fmtLong=s=>parse(s).toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+const fmtShort=s=>parse(s).toLocaleDateString('en-GB',{day:'numeric',month:'short'});
+const pct=(a,b)=>b?Math.round(100*a/b):null;
+const pctTxt=v=>v==null?'–':v+'%';
+function setPath(o,path,val){const ks=path.split('.');let x=o;for(let i=0;i<ks.length-1;i++){const k=ks[i];if(x[k]==null||typeof x[k]!=='object')x[k]={};x=x[k];}x[ks[ks.length-1]]=val;}
+const lsGet=k=>{try{return localStorage.getItem(k)}catch(e){return null}};
+const lsSet=(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}};
+const IDB={
+  open(){return new Promise((res,rej)=>{const r=indexedDB.open('smj6',1);r.onupgradeneeded=()=>r.result.createObjectStore('kv');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});},
+  async get(k){try{const db=await this.open();return await new Promise(res=>{const q=db.transaction('kv').objectStore('kv').get(k);q.onsuccess=()=>res(q.result||null);q.onerror=()=>res(null);});}catch(e){return null}},
+  async set(k,v){try{const db=await this.open();await new Promise(res=>{const tx=db.transaction('kv','readwrite');tx.objectStore('kv').put(v,k);tx.oncomplete=res;tx.onerror=res;});}catch(e){}}
+};
+
+/* ---------- state ---------- */
+const S={days:new Map(),weeks:new Map(),meta:new Map(),reviews:new Map(),tab:'day',cur:null,weekMon:null,
+  unlocked:new Set(),range:30,confirm:false,restore:null,restoreMsg:'',
+  backupMsg:'',copyText:'',date:null,dir:null,savedDir:null,connectMsg:'',needLogin:false,settings:null,settingsMsg:''};
+
+/* ---------- models ---------- */
+const arr=(a,n,f)=>{a=Array.isArray(a)?a.slice():[];while(a.length<n)a.push(typeof f==='function'?f():f);return a;};
+const todo=()=>({text:'',done:false,carried:0});
+function newDay(date){return normDay({date,status:'open',createdAt:Date.now()});}
+function normDay(d){
+  d.grateful=arr(d.grateful,3,''); d.forward=arr(d.forward,2,'');
+  d.focus={text:'',done:false,area:'',value:'',carried:0,...(d.focus||{})};
+  d.cream=arr(d.cream,2,todo); d.cherries=Array.isArray(d.cherries)?d.cherries:[];
+  d.relax=Array.isArray(d.relax)&&d.relax.length?d.relax:[{text:'',done:false}];
+  if(typeof d.notes!=='string') d.notes='';
+  d.evening={win:'',moment:'',learned:'',rating:0,...(d.evening||{})};
+  if(!d.habits||typeof d.habits!=='object') d.habits={};
+  if(!d.status) d.status='open';
+  return d;
+}
+function newWeek(id,monday){return{id,monday,cal:{mon:'',tue:'',wed:'',thu:'',fri:'',wkd:''},notes:'',wins:'',reflection:{well:'',change:'',rating:0}};}
+function normWeek(w){w.cal={mon:'',tue:'',wed:'',thu:'',fri:'',wkd:'',...(w.cal||{})};w.notes??='';w.wins??='';w.reflection={well:'',change:'',rating:0,...(w.reflection||{})};return w;}
+function profile(){
+  let p=S.meta.get('profile'); if(!p){p={};S.meta.set('profile',p);}
+  p.vision=p.vision||{}; p.vision.horizon=p.vision.horizon||'5 years'; p.vision.date=p.vision.date||''; p.vision.areas=p.vision.areas||{};
+  const v=p.values=p.values||{}; v.selected=v.selected||[]; v.top=v.top||[]; v.pairs=v.pairs||{}; v.status=v.status||{};
+  v.focus=arr(v.focus,2,''); v.answers=v.answers||{}; v.custom=v.custom||[];
+  p.habits=Array.isArray(p.habits)?p.habits:[];
+  return p;
+}
+function rankedValues(){
+  const v=profile().values; const wins={};v.top.forEach(x=>wins[x]=0);
+  for(const [k,w] of Object.entries(v.pairs)){const [a,b]=k.split('|');if(v.top.includes(a)&&v.top.includes(b)&&w in wins) wins[w]++;}
+  return v.top.slice().sort((a,b)=>wins[b]-wins[a]).map(x=>({name:x,wins:wins[x]}));
+}
+
+/* ---------- storage ---------- */
+let store=null;
+/* Folder layout: data/<collection>/<id>.json (machine data) and pages/<yyyymmdd>-Journal-Day Page-v1.md (readable copy) */
+// Inside the Windows app the host program exposes file access as chrome.webview.hostObjects.journal.
+const NATIVE=(window.chrome&&window.chrome.webview&&window.chrome.webview.hostObjects)?window.chrome.webview.hostObjects.journal:null;
+
+/* ---------- web app: Microsoft sign-in + OneDrive app folder ----------
+   Used when the page is served over https (GitHub Pages) and a client ID is configured.
+   Each user's journal lives in their own OneDrive at Apps/<app name>/, same layout as the Windows app folder. */
+const CLOUD={clientId:'__CLIENT_ID__',authority:'https://login.microsoftonline.com/common/oauth2/v2.0',
+  scopes:'openid profile offline_access Files.ReadWrite.AppFolder'};
+const CLOUD_MODE=!NATIVE&&location.protocol==='https:'&&!CLOUD.clientId.startsWith('__');
+const REDIRECT=location.origin+location.pathname.replace(/index\.html$/,'');
+const b64url=buf=>btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+const randomStr=n=>b64url(crypto.getRandomValues(new Uint8Array(n)));
+const Auth={
+  t:null,
+  load(){try{this.t=JSON.parse(localStorage.getItem('smj6:auth')||'null');}catch(e){this.t=null;}},
+  save(){try{this.t?localStorage.setItem('smj6:auth',JSON.stringify(this.t)):localStorage.removeItem('smj6:auth');}catch(e){}},
+  get user(){return this.t&&this.t.user||null;},
+  async login(prompt){
+    const verifier=randomStr(48), state=randomStr(16);
+    const challenge=b64url(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(verifier)));
+    try{sessionStorage.setItem('smj6:pkce',JSON.stringify({verifier,state}));}catch(e){}
+    const q=new URLSearchParams({client_id:CLOUD.clientId,response_type:'code',redirect_uri:REDIRECT,response_mode:'query',
+      scope:CLOUD.scopes,code_challenge:challenge,code_challenge_method:'S256',state});
+    if(prompt) q.set('prompt',prompt);
+    if(this.user&&this.user.username) q.set('login_hint',this.user.username);
+    location.assign(`${CLOUD.authority}/authorize?${q}`);
+  },
+  async redeem(body){
+    const r=await fetch(`${CLOUD.authority}/token`,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
+      body:new URLSearchParams({client_id:CLOUD.clientId,scope:CLOUD.scopes,...body})});
+    const j=await r.json();
+    if(!r.ok) throw Object.assign(new Error(j.error_description||j.error||'token error'),{code:j.error});
+    let user=this.user;
+    if(j.id_token){try{const c=JSON.parse(decodeURIComponent(escape(atob(j.id_token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')))));user={name:c.name||'',username:c.preferred_username||''};}catch(e){}}
+    this.t={access:j.access_token,refresh:j.refresh_token||(this.t&&this.t.refresh),exp:Date.now()+(j.expires_in-60)*1000,user};
+    this.save();
+  },
+  // Returns 'ok', 'login' (interaction needed) or 'none' (no redirect in the URL).
+  async handleRedirect(){
+    const p=new URLSearchParams(location.search);
+    if(!p.has('code')&&!p.has('error')) return 'none';
+    history.replaceState(null,'',REDIRECT);
+    if(p.has('error')) return 'login';
+    let saved={};try{saved=JSON.parse(sessionStorage.getItem('smj6:pkce')||'{}');sessionStorage.removeItem('smj6:pkce');}catch(e){}
+    if(!saved.state||saved.state!==p.get('state')) return 'login';
+    await this.redeem({grant_type:'authorization_code',code:p.get('code'),redirect_uri:REDIRECT,code_verifier:saved.verifier});
+    return 'ok';
+  },
+  async token(){
+    if(this.t&&this.t.access&&Date.now()<this.t.exp) return this.t.access;
+    if(this.t&&this.t.refresh){try{await this.redeem({grant_type:'refresh_token',refresh_token:this.t.refresh});return this.t.access;}catch(e){}}
+    return null;
+  },
+  signOut(){this.t=null;this.save();try{localStorage.removeItem('smj6:gcache');}catch(e){}
+    location.assign(`${CLOUD.authority}/logout?post_logout_redirect_uri=${encodeURIComponent(REDIRECT)}`);}
+};
+async function graph(path,opts={}){
+  const tok=await Auth.token();
+  if(!tok){S.needLogin=true;throw Object.assign(new Error('Sign-in expired'),{code:'auth'});}
+  const r=await fetch('https://graph.microsoft.com/v1.0'+path,{...opts,headers:{Authorization:'Bearer '+tok,...(opts.headers||{})}});
+  if(r.status===401){Auth.t.exp=0;Auth.save();}
+  return r;
+}
+async function pool(items,n,fn){let i=0;await Promise.all([...Array(Math.min(n,items.length))].map(async()=>{while(i<items.length){const it=items[i++];await fn(it);}}));}
+function graphStore(){
+  const enc=p=>p.split('/').map(encodeURIComponent).join('/');
+  const root='/me/drive/special/approot:/';
+  let cache={};try{cache=JSON.parse(localStorage.getItem('smj6:gcache')||'{}');}catch(e){}
+  const keep=()=>{try{localStorage.setItem('smj6:gcache',JSON.stringify(cache));}catch(e){}};
+  async function put(rel,text){
+    const r=await graph(`${root}${enc(rel)}:/content`,{method:'PUT',headers:{'Content-Type':'text/plain'},body:text});
+    if(!r.ok) throw new Error('OneDrive save failed ('+r.status+')');
+    return r.json();
+  }
+  return{
+    async all(c){
+      let url=`${root}data/${c}:/children?$select=name,eTag,file,@microsoft.graph.downloadUrl&$top=999`, items=[];
+      while(url){const r=await graph(url);if(r.status===404) break;if(!r.ok) throw new Error('OneDrive list failed ('+r.status+')');
+        const j=await r.json();items.push(...j.value);url=j['@odata.nextLink']?j['@odata.nextLink'].replace('https://graph.microsoft.com/v1.0',''):null;}
+      items=items.filter(it=>it.file&&it.name.endsWith('.json'));
+      const out=[], seen=new Set();
+      await pool(items,6,async it=>{const k=c+'/'+it.name;seen.add(k);let text;
+        if(cache[k]&&cache[k].etag===it.eTag) text=cache[k].text;
+        else{const r=await fetch(it['@microsoft.graph.downloadUrl']);text=await r.text();cache[k]={etag:it.eTag,text};}
+        try{out.push({id:it.name.slice(0,-5),data:JSON.parse(text)});}catch(e){console.warn('Skipped unreadable file',k);}});
+      for(const k of Object.keys(cache)) if(k.startsWith(c+'/')&&!seen.has(k)) delete cache[k];
+      keep();return out;},
+    async set(c,id,data){const text=JSON.stringify(data,null,2);const j=await put(`data/${c}/${id}.json`,text);cache[`${c}/${id}.json`]={etag:j.eTag,text};keep();},
+    async del(c,id){await graph(`${root}${enc(`data/${c}/${id}.json`)}`,{method:'DELETE'});delete cache[`${c}/${id}.json`];keep();},
+    async writeText(path,name,text){await put(`${path}/${name}`,text);}
+  };
+}
+// Unsaved edits survive a sign-in redirect: they are parked in localStorage and saved again after login.
+function parkPending(){const out=[];for(const k of Object.keys(saveQ)){const [c,id]=k.split('/');const d=S[c]&&S[c].get(id);if(d)out.push([c,id,d]);}
+  try{if(out.length)localStorage.setItem('smj6:pending',JSON.stringify(out));}catch(e){}}
+function restorePending(){let list=[];try{list=JSON.parse(localStorage.getItem('smj6:pending')||'[]');localStorage.removeItem('smj6:pending');}catch(e){}
+  for(const [c,id,d] of list){if(c==='days')normDay(d);S[c].set(id,d);scheduleSave(c,id,100);}}
+function nativeStore(){return{
+  async all(c){const o=JSON.parse(await NATIVE.ListCollection(c));const out=[];
+    for(const [id,text] of Object.entries(o)){try{out.push({id,data:JSON.parse(text)});}catch(e){console.warn('Skipped unreadable file',id,e);}}
+    return out;},
+  set:(c,id,data)=>NATIVE.WriteText(`data/${c}/${id}.json`,JSON.stringify(data,null,2)),
+  del:(c,id)=>NATIVE.DeleteFile(`data/${c}/${id}.json`),
+  writeText:(path,name,text)=>NATIVE.WriteText(`${path}/${name}`,text)
+};}
+function fsStore(root){
+  const cache={};
+  async function dir(path){
+    if(cache[path]) return cache[path];
+    let h=root;for(const p of path.split('/')) h=await h.getDirectoryHandle(p,{create:true});
+    return (cache[path]=h);
+  }
+  async function writeText(path,name,text){
+    const d=await dir(path);const fh=await d.getFileHandle(name,{create:true});
+    const w=await fh.createWritable();await w.write(text);await w.close();
+  }
+  return{
+    async all(c){const d=await dir('data/'+c);const out=[];
+      for await(const [name,h] of d.entries()){
+        if(h.kind!=='file'||!name.endsWith('.json')) continue;
+        try{out.push({id:name.slice(0,-5),data:JSON.parse(await (await h.getFile()).text())});}catch(e){console.warn('Skipped unreadable file',name,e);}
+      }
+      return out;},
+    set:(c,id,data)=>writeText('data/'+c,id+'.json',JSON.stringify(data,null,2)),
+    async del(c,id){const d=await dir('data/'+c);try{await d.removeEntry(id+'.json');}catch(e){}},
+    writeText
+  };
+}
+function dayMarkdown(d){
+  const p=profile(), s=dayStats(d,p.habits), ck=t=>t.done?'[x]':'[ ]', L=[];
+  const list=(title,items)=>{L.push('## '+title);items.length?L.push(...items):L.push('(empty)');L.push('');};
+  L.push(`# ${fmtLong(d.date)}`,'',`Status: ${d.status==='closed'?'archived':'open'}. Day score: ${s.score}/100.`,'');
+  list('1. Grateful for',d.grateful.filter(filled).map(x=>'- '+x));
+  list('2. Looking forward to',d.forward.filter(filled).map(x=>'- '+x));
+  list('3. Daily focus',filled(d.focus.text)?[`- ${ck(d.focus)} ${d.focus.text}${d.focus.carried?` (moved ${d.focus.carried}x)`:''}`,
+    `- Life area: ${AREA[d.focus.area]||'not tagged'}. Value: ${d.focus.value||'not tagged'}.`]:[]);
+  list('4. To-do list',[...d.cream,...d.cherries].filter(t=>filled(t.text)).map(t=>`- ${ck(t)} ${t.text}${t.carried?` (moved ${t.carried}x)`:''}`));
+  list('5. To-relax list',d.relax.filter(t=>filled(t.text)).map(t=>`- ${ck(t)} ${t.text}`));
+  list('6. Appointments and notes',filled(d.notes)?[d.notes]:[]);
+  list('7. Thoughts, ideas and wins',[filled(d.evening.win)?'- Mini win: '+d.evening.win:'',filled(d.evening.moment)?'- Best moment: '+d.evening.moment:'',
+    filled(d.evening.learned)?'- Learned: '+d.evening.learned:'',d.evening.rating?`- Day rating: ${d.evening.rating}/5`:''].filter(Boolean));
+  list('8. Habits',p.habits.map(h=>`- ${d.habits[h.id]?'[x]':'[ ]'} ${h.name}`));
+  return L.join('\n');
+}
+const saveQ={};
+function scheduleSave(col,id,delay=700){
+  const k=col+'/'+id, q=saveQ[k]||(saveQ[k]={});
+  clearTimeout(q.timer); q.dirty=true; setStatus('saving');
+  q.timer=setTimeout(()=>flush(col,id),delay);
+}
+async function flush(col,id){
+  const k=col+'/'+id, q=saveQ[k]; if(!q) return;
+  clearTimeout(q.timer); q.timer=null;
+  if(q.inflight){q.again=true;return;}
+  const data=S[col].get(id); if(!data){delete saveQ[k];return;}
+  q.inflight=true; q.dirty=false;
+  try{data.updatedAt=Date.now();await store.set(col,id,JSON.parse(JSON.stringify(data)));
+    if(col==='days'&&dayStats(data,profile().habits).journaled) await store.writeText('pages',`${id.replaceAll('-','')}-Journal-Day Page-v1.md`,dayMarkdown(data));
+    q.failed=false;}
+  catch(e){console.warn('save failed',e);q.dirty=true;q.failed=true;
+    setStatus('error',CLOUD_MODE?(e&&e.code==='auth'?'Your sign-in expired. Tap to sign in again; your changes are kept.':'No connection to OneDrive. Your changes stay on screen; tap to try again.')
+      :'Saving to the folder failed. Check that the folder still exists, then tap to try again.');}
+  q.inflight=false;
+  if(q.again){q.again=false;return flush(col,id);}
+  if(!q.dirty&&!q.timer) delete saveQ[k];
+  refreshStatus();
+}
+function refreshStatus(){
+  const qs=Object.values(saveQ);
+  if(qs.some(q=>q.failed&&q.dirty)) return setStatus('error','Saving failed. Tap to try again.');
+  if(qs.length) return setStatus('saving');
+  setStatus('saved');
+}
+function setStatus(s,msg){const el=$('#status');if(!el)return;
+  const t={saving:'Saving…',saved:CLOUD_MODE?'Saved to OneDrive':'Saved to folder',error:CLOUD_MODE&&S.needLogin?'Not saved · sign in':'Not saved · retry'};
+  el.textContent=t[s]||''; el.dataset.s=s; el.title=msg||(S.dir?'Folder: '+S.dir.name:'');}
+let pendingRender=false;
+const typing=()=>{const a=document.activeElement;return !!(a&&a.matches&&a.matches('input:not([type=checkbox]):not([type=file]),textarea,select'));};
+function softRender(){if(typing()){pendingRender=true;return;}render();}
+document.addEventListener('focusout',()=>{if(pendingRender)setTimeout(()=>{if(pendingRender&&!typing())render();},0);});
+
+/* ---------- day lifecycle ---------- */
+function carry(from,to){
+  if(from.carriedTo) return;
+  const have=new Set([to.focus.text,...to.cream.map(t=>t.text),...to.cherries.map(t=>t.text)].map(s=>String(s).trim().toLowerCase()).filter(Boolean));
+  const items=[];
+  if(filled(from.focus.text)&&!from.focus.done) items.push({text:from.focus.text,carried:(from.focus.carried||0)+1,focus:true,area:from.focus.area,value:from.focus.value});
+  for(const t of [...from.cream,...from.cherries]) if(filled(t.text)&&!t.done) items.push({text:t.text,carried:(t.carried||0)+1});
+  for(const it of items){
+    if(have.has(it.text.trim().toLowerCase())) continue;
+    if(it.focus&&!filled(to.focus.text)){Object.assign(to.focus,{text:it.text,done:false,carried:it.carried,area:it.area||'',value:it.value||''});continue;}
+    const t={text:it.text,done:false,carried:it.carried};
+    const slot=to.cream.find(c=>!filled(c.text));
+    if(slot) Object.assign(slot,t); else to.cherries.push(t);
+  }
+  from.carriedTo=to.date;
+}
+function ensureTimeline(){
+  const t=todayStr(); S.date=t;
+  const dates=[...S.days.keys()].sort();
+  for(const d of dates){const x=S.days.get(d);if(d<t&&x.status==='open'){x.status='closed';x.closedAt=Date.now();scheduleSave('days',d,60);}}
+  if(!S.days.has(t)){
+    const day=newDay(t); const prev=dates.filter(d=>d<t).pop();
+    if(prev){carry(S.days.get(prev),day);scheduleSave('days',prev,60);}
+    S.days.set(t,day); scheduleSave('days',t,60);
+  }
+  const open=[...S.days.keys()].sort().filter(d=>d>=t&&S.days.get(d).status==='open');
+  S.cur=open[0]||t; S.weekMon=mondayOf(S.cur);
+}
+function maxDate(){const ks=[...S.days.keys()].sort();const last=ks[ks.length-1]||S.date;const tm=addDays(S.date,1);return last>tm?last:tm;}
+function checkDate(){if(S.date&&todayStr()!==S.date){ensureTimeline();render();}}
+
+/* ---------- scoring & analysis ---------- */
+function dayStats(d,habits){
+  const todos=[...d.cream,...d.cherries].filter(t=>filled(t.text));
+  const cream=d.cream.filter(t=>filled(t.text));
+  const relax=d.relax.filter(t=>filled(t.text));
+  const ev=d.evening;
+  const morning=filled(d.focus.text)||d.grateful.some(filled)||cream.length>0;
+  const evening=filled(ev.win)||filled(ev.moment)||filled(ev.learned)||ev.rating>0;
+  const hDone=habits.filter(h=>d.habits[h.id]).length;
+  const focusSet=filled(d.focus.text);
+  let pts=0;const max=40+20+15+(habits.length?15:0)+10;
+  if(focusSet&&d.focus.done) pts+=40;
+  if(cream.length) pts+=20*cream.filter(t=>t.done).length/cream.length;
+  if(relax.some(t=>t.done)) pts+=15;
+  if(habits.length) pts+=15*hDone/habits.length;
+  if(evening) pts+=10;
+  return{journaled:morning||evening,morning,evening,focusSet,focusDone:focusSet&&d.focus.done,
+    todos:todos.length,todosDone:todos.filter(t=>t.done).length,cream:cream.length,creamDone:cream.filter(t=>t.done).length,
+    relax:relax.length,relaxDone:relax.filter(t=>t.done).length,hDone,hTotal:habits.length,rating:ev.rating||0,
+    score:Math.round(100*pts/max)};
+}
+function analyse(range){
+  const t=S.date, p=profile(), habits=p.habits;
+  const first=[...S.days.keys()].sort()[0]||t;
+  let start=range==='all'?first:addDays(t,-(range-1));
+  const days=[];for(let d=start;d<=t;d=addDays(d,1)){const doc=S.days.get(d);days.push({date:d,doc,s:doc?dayStats(doc,habits):null});}
+  const J=days.filter(x=>x.s&&x.s.journaled);
+  const sum=f=>J.reduce((a,x)=>a+f(x.s),0);
+  const r={range,label:range==='all'?'all time':`the last ${range} days`,days,n:days.length,journaled:J.length};
+  r.focusSet=sum(s=>s.focusSet?1:0); r.focusDone=sum(s=>s.focusDone?1:0);
+  r.todos=sum(s=>s.todos); r.todosDone=sum(s=>s.todosDone); r.cream=sum(s=>s.cream); r.creamDone=sum(s=>s.creamDone);
+  r.relaxDays=sum(s=>s.relaxDone>0?1:0); r.evenings=sum(s=>s.evening?1:0); r.mornings=sum(s=>s.morning?1:0);
+  const rated=J.filter(x=>x.s.rating>0); r.ratingAvg=rated.length?(rated.reduce((a,x)=>a+x.s.rating,0)/rated.length):null;
+  r.scoreAvg=days.length?Math.round(days.reduce((a,x)=>a+(x.s&&x.s.journaled?x.s.score:0),0)/days.length):0;
+  // streak
+  let k=0,d=t;const jd=x=>{const doc=S.days.get(x);return doc&&dayStats(doc,habits).journaled;};
+  if(!jd(d)) d=addDays(d,-1); while(jd(d)){k++;d=addDays(d,-1);} r.streak=k;
+  // habits
+  r.habits=habits.map(h=>{let done=0;for(const x of J) if(x.doc.habits[h.id]) done++;
+    let st=0,dd=t;const on=x=>{const doc=S.days.get(x);return !!(doc&&doc.habits[h.id]);};if(!on(dd))dd=addDays(dd,-1);while(on(dd)){st++;dd=addDays(dd,-1);}
+    const last=[];for(let i=13;i>=0;i--){last.push(on(addDays(t,-i)));}
+    return{id:h.id,name:h.name||'Unnamed habit',done,rate:pct(done,J.length),streak:st,last};});
+  // areas & values of focus tasks
+  r.areas=AREAS.map(([id,name])=>{const xs=J.filter(x=>x.s.focusSet&&x.doc.focus.area===id);return{id,name,n:xs.length,done:xs.filter(x=>x.doc.focus.done).length,vision:filled(p.vision.areas[id])};});
+  r.untagged=J.filter(x=>x.s.focusSet&&!x.doc.focus.area).length;
+  const vals=rankedValues().map(v=>v.name);
+  r.values=vals.map(v=>({name:v,n:J.filter(x=>x.s.focusSet&&x.doc.focus.value===v).length,more:p.values.status[v]==='more'}));
+  // chronic carry-overs
+  const carriedMap={};
+  for(const x of days){if(!x.doc)continue;const its=[{...x.doc.focus},...x.doc.cream,...x.doc.cherries];
+    for(const it of its){if(filled(it.text)&&(it.carried||0)>=3&&!it.done){const key=it.text.trim();carriedMap[key]=Math.max(carriedMap[key]||0,it.carried);}}}
+  r.chronic=Object.entries(carriedMap).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  // weeks
+  const wk={};for(const x of days){const m=mondayOf(x.date);(wk[m]=wk[m]||[]).push(x);}
+  r.weeks=Object.entries(wk).sort((a,b)=>a[0]<b[0]?1:-1).map(([m,xs])=>{const j=xs.filter(x=>x.s&&x.s.journaled);
+    const f=j.filter(x=>x.s.focusSet),fd=f.filter(x=>x.s.focusDone);const td=j.reduce((a,x)=>a+x.s.todos,0),tdd=j.reduce((a,x)=>a+x.s.todosDone,0);
+    return{monday:m,id:isoWeek(m),days:xs.length,journaled:j.length,focus:pct(fd.length,f.length),todos:pct(tdd,td),score:Math.round(xs.reduce((a,x)=>a+(x.s&&x.s.journaled?x.s.score:0),0)/xs.length)};});
+  r.insights=insights(r,p);
+  return r;
+}
+function insights(r,p){
+  const out=[];
+  if(!r.journaled){out.push(['bad','No entries yet in this period. Fill in the morning part of today\'s page to start.']);return out;}
+  const fr=pct(r.focusDone,r.focusSet);
+  out.push([r.journaled/r.n>=0.8?'good':'bad',`You journaled on ${r.journaled} of ${r.n} days (${pct(r.journaled,r.n)}%). Current streak: ${r.streak} day${r.streak===1?'':'s'}.`]);
+  if(r.focusSet) out.push([fr>=70?'good':'bad',`You completed your daily focus on ${r.focusDone} of ${r.focusSet} days (${fr}%).${fr<70?' Pick a smaller, clearer focus task that you can finish before noon.':''}`]);
+  if(r.focusSet<r.journaled) out.push(['bad',`On ${r.journaled-r.focusSet} journaled days you set no daily focus. The focus task is the core of the method.`]);
+  if(r.evenings<r.journaled*0.6) out.push(['bad',`Evening reflection was filled on only ${r.evenings} of ${r.journaled} days. Two minutes before sleep is enough.`]);
+  if(r.relaxDays<r.journaled*0.5) out.push(['bad',`You finished a to-relax item on ${r.relaxDays} of ${r.journaled} days. Rest is part of the plan, so schedule it like a meeting.`]);
+  else out.push(['good',`You made time to relax on ${r.relaxDays} of ${r.journaled} days.`]);
+  const neglected=r.areas.filter(a=>a.vision&&a.n===0).map(a=>a.name);
+  if(neglected.length) out.push(['bad',`Your vision covers ${neglected.join(', ')}, but no daily focus served ${neglected.length>1?'these areas':'this area'}.`]);
+  const top=r.areas.slice().sort((a,b)=>b.n-a.n)[0]; if(top&&top.n) out.push(['good',`Most of your focus went to ${top.name} (${top.n} day${top.n===1?'':'s'}).`]);
+  const more=r.values.filter(v=>v.more);
+  for(const v of more) out.push([v.n?'good':'bad',`You want to live "${v.name}" more. ${v.n?`${v.n} focus task${v.n===1?' was':'s were'} tagged with it.`:'No focus task was tagged with it yet.'}`]);
+  for(const [t,n] of r.chronic.slice(0,3)) out.push(['bad',`"${t}" has moved forward ${n} times. Do it first tomorrow, delegate it, or drop it.`]);
+  for(const h of r.habits) if(h.rate!=null&&h.rate<50) out.push(['bad',`Habit "${h.name}" was done on ${h.rate}% of journaled days.`]);
+  return out;
+}
+
+/* ---------- rendering ---------- */
+function render(){
+  pendingRender=false;
+  document.querySelectorAll('[data-tab]').forEach(b=>b.setAttribute('aria-current',b.dataset.tab===S.tab?'page':'false'));
+  const v=S.tab, m=$('#main');
+  if(!store){m.innerHTML=viewConnect();return;}
+  m.innerHTML=(v==='week'?viewWeek():v==='me'?viewMe():v==='history'?viewHistory():v==='progress'?viewProgress():viewDay());
+}
+const banner=()=>'';
+function viewConnect(){
+  if(CLOUD_MODE) return `<article class="sheet"><div class="dhead"><span class="label">Welcome</span><h1 class="date">Your private 6-Minute Journal</h1>
+    <p class="muted">Sign in with your Microsoft account (work or personal). Your journal is saved only in your own OneDrive, in the folder <code>Apps › 6-Minute Journal</code>. The app cannot see any of your other files, and nobody else can read your entries.</p></div>
+    <div class="row"><button class="btn" data-act="signin">Sign in with Microsoft</button></div>
+    <p class="small muted">Tip: on the phone, use "Add to Home Screen" in the browser menu to open the journal like an app.</p>
+    ${S.connectMsg?`<p class="err">${esc(S.connectMsg)}</p>`:''}</article>`;
+  if(NATIVE) return `<article class="sheet"><div class="dhead"><span class="label">Welcome</span><h1 class="date">Choose your journal folder</h1>
+    <p class="muted">Every day is saved as its own file in a folder you choose. A folder inside OneDrive is a good choice because it is backed up automatically. If you already used the journal, choose the folder that contains its <code>data</code> folder.</p></div>
+    <div class="row"><button class="btn" data-act="connect">Choose folder</button></div>
+    ${S.connectMsg?`<p class="err">${esc(S.connectMsg)}</p>`:''}</article>`;
+  if(!('showDirectoryPicker' in window)) return `<article class="sheet"><div class="dhead"><span class="label">Browser not supported</span><h1 class="date">Open this file in Microsoft Edge or Google Chrome</h1>
+    <p class="muted">The journal saves each day as a file in your Daily Plans folder. Only Edge and Chrome allow a page to write into a folder.</p></div></article>`;
+  const h=S.savedDir;
+  return `<article class="sheet"><div class="dhead"><span class="label">Journal folder</span><h1 class="date">${h?'Open your journal':'Choose your journal folder'}</h1>
+    <p class="muted">${h?`Your journal is saved in the folder <strong>${esc(h.name)}</strong>. Your browser asks once per session before the page may use it. Choose "Allow on every visit" to skip this step next time.`
+      :'Choose the <strong>Daily Plans</strong> folder in your OneDrive (the folder that contains this app file). Every day is saved there as its own file, so Claude can read them for analysis.'}</p></div>
+    <div class="row"><button class="btn" data-act="connect">${h?`Open ${esc(h.name)}`:'Choose folder'}</button>${h?'<button class="ghost small" data-act="connect" data-mode="pick">Use a different folder</button>':''}</div>
+    ${S.connectMsg?`<p class="err">${esc(S.connectMsg)}</p>`:''}</article>`;
+}
+function relLabel(date){const t=S.date;return date===t?'Today':date===addDays(t,1)?'Tomorrow':date===addDays(t,-1)?'Yesterday':'';}
+
+function viewDay(){
+  const date=S.cur, t=S.date, d=S.days.get(date), p=profile();
+  const nav=`<div class="daynav"><button class="ghost" data-act="day-go" data-d="-1" aria-label="Previous day">‹</button>
+    <button class="ghost small" data-act="day-today" ${date===t?'disabled':''}>Today</button>
+    <button class="ghost" data-act="day-go" data-d="1" ${date>=maxDate()?'disabled':''} aria-label="Next day">›</button></div>`;
+  const q=QUOTES[((dayIndex(date)%QUOTES.length)+QUOTES.length)%QUOTES.length];
+  const locked=!!d&&d.status==='closed'&&!S.unlocked.has(date);
+  const rl=relLabel(date);
+  const chips=[rl?`<span class="chip">${rl}</span>`:'',d&&d.status==='closed'?`<span class="chip locked">${locked?'Archived':'Archived · editing'}</span>`:''].join('');
+  const head=`<div class="dhead"><div class="drow"><ol class="wd" aria-label="Weekday">${WD.map((w,k)=>`<li class="${k===dow(date)?'on':''}">${w}</li>`).join('')}</ol>${nav}</div>
+    <h1 class="date">${esc(fmtLong(date))}</h1><div class="row">${chips}</div></div>
+    <blockquote class="quote"><p>${esc(q[0])}</p><cite>${esc(q[1])}</cite></blockquote>`;
+  if(!d) return banner()+`<article class="sheet">${head}<div class="empty"><p class="muted">No page was written for this day.</p><button class="btn" data-act="day-create">Write this page now</button></div></article>`;
+  const dis=locked?'disabled':'';
+  const b=path=>`data-b="days/${date}/${path}"`;
+  const line=(path,val,ph,label)=>`<input class="line" type="text" ${b(path)} value="${esc(val)}" placeholder="${esc(ph)}" aria-label="${esc(label||ph)}" ${dis}>`;
+  const item=(list,i,it,ph,removable)=>`<div class="item ${it.done?'done':''}">
+    <input type="checkbox" ${b(`${list}.${i}.done`)} data-rerender ${it.done?'checked':''} ${dis} aria-label="Done">
+    ${line(`${list}.${i}.text`,it.text,ph)}
+    ${it.carried?`<span class="carried" title="Moved forward from earlier days">↻ ${it.carried}</span>`:''}
+    ${removable&&!locked?`<button class="x" data-act="del-item" data-list="${list}" data-i="${i}" aria-label="Remove">×</button>`:''}</div>`;
+  const vals=rankedValues().map(v=>v.name); const valOpts=vals.length?vals:p.values.selected;
+  const s=dayStats(d,p.habits);
+  const sec=(n,title,sub,body,eve)=>`<section class="sec ${eve?'eve':''}"><span class="num">${n}</span><div class="sec-b"><div class="sec-h"><h3>${title}${sub?`<small>${sub}</small>`:''}</h3></div>${body}</div></section>`;
+
+  let html=banner()+`<article class="sheet">${head}
+  <div class="part"><span class="label">Morning · plan the day</span>${s.morning?'<span class="chip ok">Planned</span>':''}</div>`;
+  html+=sec(1,'I am grateful for','',d.grateful.map((g,i)=>line(`grateful.${i}`,g,i===0?'Something or someone that made life better':'…','Grateful for '+(i+1))).join(''));
+  html+=sec(2,'I am looking forward to','',d.forward.map((g,i)=>line(`forward.${i}`,g,i===0?'A moment you will enjoy today':'…','Looking forward to '+(i+1))).join(''));
+  html+=sec(3,'Daily focus','the slice of cake',`<p class="small muted">The one task that leaves you satisfied and strengthened once it is done.</p>
+    <div class="focus-box">${item('focus-x',0,d.focus,'My most important task today',false).replaceAll('focus-x.0.','focus.')}
+    <div class="tags"><label>Life area<select class="line" ${b('focus.area')} ${dis}><option value="">Not tagged</option>${AREAS.map(a=>`<option value="${a[0]}" ${d.focus.area===a[0]?'selected':''}>${esc(a[1])}</option>`).join('')}</select></label>
+    <label>Value it serves<select class="line" ${b('focus.value')} ${dis}><option value="">Not tagged</option>${valOpts.map(v=>`<option ${d.focus.value===v?'selected':''}>${esc(v)}</option>`).join('')}</select></label></div></div>
+    ${!valOpts.length?`<button class="linkbtn" data-act="tab" data-tab="me">Choose your values to tag focus tasks</button>`:''}`);
+  html+=sec(4,'To-do list','',`<span class="label">Whipped cream · tasks 2 and 3</span>${d.cream.map((t,i)=>item('cream',i,t,i===0?'Second most important task':'Third most important task',false)).join('')}
+    <span class="label" style="margin-top:8px">Cherries on top · everything else</span>${d.cherries.map((t,i)=>item('cherries',i,t,'Task',true)).join('')||'<p class="small muted">Nothing yet.</p>'}
+    ${locked?'':`<button class="linkbtn" data-act="add" data-list="cherries">+ Add task</button>`}`);
+  html+=sec(5,'To-relax list','',`<p class="small muted">Take the time for yourself as seriously as a work appointment.</p>${d.relax.map((t,i)=>item('relax',i,t,'A walk, a call, no phone after 21:00…',d.relax.length>1)).join('')}
+    ${locked?'':`<button class="linkbtn" data-act="add" data-list="relax">+ Add relax item</button>`}`);
+  html+=sec(6,'Appointments &amp; notes','',`<textarea class="lined" rows="3" ${b('notes')} placeholder="12:30 lunch with Steffen · 15:30 project pitch" aria-label="Appointments and notes" ${dis}>${esc(d.notes)}</textarea>`);
+  html+=`<div class="part"><span class="label">Evening · reflect</span>${s.evening?'<span class="chip ok">Reflected</span>':''}</div>`;
+  html+=sec(7,'Thoughts, ideas &amp; wins','',`${line('evening.win',d.evening.win,'Mini win of the day','Mini win')}
+    ${line('evening.moment',d.evening.moment,'Best moment of the day','Best moment')}
+    ${line('evening.learned',d.evening.learned,'What I learned or would do differently','Learned')}
+    <span class="label" style="margin-top:10px">How was the day?</span>
+    <div class="rating" role="group" aria-label="Day rating">${[1,2,3,4,5].map(n=>`<button data-act="rate" data-n="${n}" aria-pressed="${d.evening.rating===n}" ${dis}>${n}</button>`).join('')}</div>`,true);
+  html+=sec(8,'Habit tracker','',p.habits.length?`<div class="habits">${p.habits.map(h=>`<label><input type="checkbox" ${b('habits.'+h.id)} data-rerender ${d.habits[h.id]?'checked':''} ${dis}> ${esc(h.name||'Unnamed habit')}</label>`).join('')}</div>`
+    :`<p class="small muted">No habits yet.</p><button class="linkbtn" data-act="tab" data-tab="me" data-anchor="habits">Add habits to track</button>`,true);
+  html+=`<div class="finish"><div class="score-line"><span class="label">Day score</span><strong>${s.score}</strong><span class="muted small">/ 100 · focus 40, tasks 2 and 3: 20, relax 15${p.habits.length?', habits 15':''}, reflection 10</span></div>`;
+  if(locked) html+=`<div class="row"><button class="btn sec2" data-act="unlock">Edit this page</button><span class="small muted">Archived pages are locked so your record stays honest.</span></div>`;
+  else if(date<=t&&d.status==='open'){
+    html+=S.confirm?`<div class="confirm"><p>Lock this page and open tomorrow's page? Unfinished tasks move to tomorrow.</p><div class="row"><button class="btn" data-act="finish-yes">Finish day</button><button class="ghost" data-act="finish-no">Cancel</button></div></div>`
+      :`<div class="row"><button class="btn" data-act="finish">Finish day &amp; prepare tomorrow</button><span class="small muted">Do this in the evening after steps 7 and 8.</span></div>`;
+  } else if(date>t) html+=`<p class="small muted">Prepared in advance. This page becomes today's page in the morning.</p>`;
+  else if(d.status==='closed') html+=`<div class="row"><button class="ghost small" data-act="lock">Done editing</button></div>`;
+  html+=`</div></article>`;
+  return html;
+}
+
+function viewWeek(){
+  const mon=S.weekMon, wid=isoWeek(mon), t=S.date, p=profile();
+  if(!S.weeks.has(wid)) S.weeks.set(wid,newWeek(wid,mon));
+  const w=S.weeks.get(wid); const b=path=>`data-b="weeks/${wid}/${path}"`;
+  const dates=[...Array(7)].map((_,i)=>addDays(mon,i));
+  let h=banner()+`<article class="sheet"><div class="dhead"><div class="drow"><span class="label">Week ${esc(wid.split('-W')[1])} · ${esc(wid.split('-W')[0])}</span>
+    <div class="daynav"><button class="ghost" data-act="week-go" data-d="-7" aria-label="Previous week">‹</button><button class="ghost small" data-act="week-now" ${mondayOf(t)===mon?'disabled':''}>This week</button><button class="ghost" data-act="week-go" data-d="7" aria-label="Next week">›</button></div></div>
+    <h1 class="date">${esc(fmtShort(mon))} to ${esc(fmtShort(dates[6]))}</h1></div>`;
+  h+=`<section class="sec"><span class="num">1</span><div class="sec-b"><h3>Calendar &amp; appointments</h3><div class="cal">${CAL.map(([k,n])=>`<label><span class="label">${n}</span><textarea class="lined" rows="2" ${b('cal.'+k)} aria-label="${n}">${esc(w.cal[k])}</textarea></label>`).join('')}</div></div></section>`;
+  h+=`<section class="sec"><span class="num">2</span><div class="sec-b"><h3>Habit tracker</h3>${p.habits.length?`<div class="tablewrap"><table><thead><tr><th>Habit</th>${dates.map((d,i)=>`<th class="${d===t?'today-col':''}">${WD[i]}</th>`).join('')}</tr></thead><tbody>
+    ${p.habits.map(hb=>`<tr><td>${esc(hb.name||'Unnamed habit')}</td>${dates.map(d=>{const doc=S.days.get(d);return `<td class="${d===t?'today-col':''}"><input type="checkbox" data-act="wh" data-date="${d}" data-h="${hb.id}" ${doc&&doc.habits[hb.id]?'checked':''} ${d>t?'disabled':''} aria-label="${esc(hb.name)} ${d}"></td>`;}).join('')}</tr>`).join('')}
+    </tbody></table></div>`:`<p class="small muted">No habits yet.</p><button class="linkbtn" data-act="tab" data-tab="me">Add habits</button>`}</div></section>`;
+  h+=`<section class="sec"><span class="num">3</span><div class="sec-b"><h3>Daily focus this week</h3><ul class="wfocus">${dates.map((d,i)=>{const doc=S.days.get(d);const f=doc&&filled(doc.focus.text);
+    return `<li><span>${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][i]}</span><button class="linkbtn" style="text-align:left;color:inherit;font-weight:500" data-act="open-day" data-date="${d}">${f?esc(doc.focus.text):'<span class="muted">No focus set</span>'}</button>${f?(doc.focus.done?'<span class="chip ok">Done</span>':(d<t?'<span class="chip gold">Open</span>':'')):''}</li>`;}).join('')}</ul></div></section>`;
+  h+=`<section class="sec"><span class="num">4</span><div class="sec-b"><h3>Notes &amp; ideas</h3><textarea class="lined" rows="3" ${b('notes')} aria-label="Notes and ideas">${esc(w.notes)}</textarea></div></section>`;
+  h+=`<section class="sec"><span class="num">5</span><div class="sec-b"><h3>Wins &amp; progress</h3><textarea class="lined" rows="3" ${b('wins')} aria-label="Wins and progress">${esc(w.wins)}</textarea></div></section>`;
+  h+=`<section class="sec eve"><span class="num">6</span><div class="sec-b"><h3>Weekly reflection</h3>
+    <input class="line" type="text" ${b('reflection.well')} value="${esc(w.reflection.well)}" placeholder="What went well this week?" aria-label="What went well">
+    <input class="line" type="text" ${b('reflection.change')} value="${esc(w.reflection.change)}" placeholder="What will I do differently next week?" aria-label="What to change">
+    <span class="label" style="margin-top:10px">How was the week?</span><div class="rating">${[1,2,3,4,5].map(n=>`<button data-act="wrate" data-n="${n}" aria-pressed="${w.reflection.rating===n}">${n}</button>`).join('')}</div></div></section>`;
+  return h+`</article>`;
+}
+
+function viewMe(){
+  const p=profile(), v=p.values, b=path=>`data-b="meta/profile/${path}"`;
+  let h=banner()+`<article class="sheet"><div class="dhead"><span class="label">Foundation</span><h1 class="date">My vision of myself</h1>
+    <p class="muted">Write the goals your future self reaches in each life area. The analyser compares your daily focus tasks with this vision.</p></div>
+    <div class="row"><label class="small muted">Horizon <select class="line" style="width:auto" ${b('vision.horizon')}>${['1 year','2 years','5 years','10 years','25 years'].map(x=>`<option ${p.vision.horizon===x?'selected':''}>${x}</option>`).join('')}</select></label>
+    <label class="small muted">Date <input class="line" style="width:auto" type="date" ${b('vision.date')} value="${esc(p.vision.date)}"></label></div>
+    <div class="area-grid">${AREAS.map(([id,n,q])=>`<label><span class="label">${esc(n)}</span><span class="q">${esc(q)}</span><textarea class="lined" rows="3" ${b('vision.areas.'+id)} aria-label="${esc(n)}">${esc(p.vision.areas[id]||'')}</textarea></label>`).join('')}</div></article>`;
+
+  // values test
+  const all=[...VALUES,...v.custom];
+  h+=`<article class="sheet"><div class="dhead"><span class="label">Values test</span><h1 class="date">My values</h1>
+    <p class="muted">Your values are your why. Pick the ten that describe who you really are, not who you wish to be.</p></div>
+    <section class="sec"><span class="num">1</span><div class="sec-b"><div class="sec-h"><h3>Pick ten values</h3><span class="chip">${v.selected.length} of 10</span></div>
+    <p class="small muted">Prompts: I live where I live because… · I do my job because… · I like to be around people who… · It is unacceptable to me when…</p>
+    <div class="vchips">${all.map(x=>{const on=v.selected.includes(x);return `<button class="vchip" data-act="vpick" data-v="${esc(x)}" aria-pressed="${on}" ${!on&&v.selected.length>=10?'disabled':''}>${esc(x)}</button>`;}).join('')}</div>
+    <div class="row"><input class="line" style="max-width:16rem" type="text" id="newValue" placeholder="Add your own value" aria-label="Add your own value"><button class="ghost small" data-act="vadd">Add</button></div></div></section>`;
+  if(v.selected.length>=5){
+    h+=`<section class="sec"><span class="num">2</span><div class="sec-b"><div class="sec-h"><h3>Star your five most important</h3><span class="chip gold">${v.top.length} of 5</span></div>
+      <p class="small muted">Listen to your feeling more than your reasoning. Which five give you the strongest tingle?</p>
+      <div class="vchips">${v.selected.map(x=>{const on=v.top.includes(x);return `<button class="vchip star" data-act="vstar" data-v="${esc(x)}" aria-pressed="${on}" ${!on&&v.top.length>=5?'disabled':''}>${on?'★ ':''}${esc(x)}</button>`;}).join('')}</div></div></section>`;
+  }
+  if(v.top.length===5){
+    const pairs=[];for(let i=0;i<5;i++)for(let j=i+1;j<5;j++)pairs.push([v.top[i],v.top[j]]);
+    const doneN=pairs.filter(([a,c])=>v.pairs[[a,c].sort().join('|')]).length;
+    h+=`<section class="sec"><span class="num">3</span><div class="sec-b"><div class="sec-h"><h3>Compare each pair</h3><span class="chip">${doneN} of 10</span></div>
+      <p class="small muted">Which of the two matters more to you? Picture a real everyday decision.</p>
+      <div class="pairs">${pairs.map(([a,c])=>{const k=[a,c].sort().join('|'),w=v.pairs[k];return `<div class="pair"><button data-act="pair" data-k="${esc(k)}" data-v="${esc(a)}" aria-pressed="${w===a}">${esc(a)}</button><span>or</span><button data-act="pair" data-k="${esc(k)}" data-v="${esc(c)}" aria-pressed="${w===c}">${esc(c)}</button></div>`;}).join('')}</div></div></section>`;
+    if(doneN===10){
+      const rk=rankedValues();
+      h+=`<section class="sec"><span class="num">4</span><div class="sec-b"><h3>My value hierarchy</h3><ol class="rank">${rk.map((x,i)=>`<li><span class="n">${i+1}</span><span>${esc(x.name)}<span class="tally" aria-label="${x.wins} wins">${'|'.repeat(x.wins)||'·'}</span></span>
+        <span class="seg"><button data-act="vstatus" data-v="${esc(x.name)}" data-s="well" aria-pressed="${v.status[x.name]==='well'}">Living it well</button><button data-act="vstatus" data-v="${esc(x.name)}" data-s="more" aria-pressed="${v.status[x.name]==='more'}">Want more</button></span></li>`).join('')}</ol></div></section>`;
+      h+=`<section class="sec"><span class="num">5</span><div class="sec-b"><h3>Two values to work on</h3><p class="small muted">Which two of your five create the strongest need to bring them into your life?</p>
+        <div class="tags">${[0,1].map(i=>`<label>Value ${i+1}<select class="line" ${b('values.focus.'+i)} data-rerender><option value="">Choose</option>${rk.map(x=>`<option ${v.focus[i]===x.name?'selected':''}>${esc(x.name)}</option>`).join('')}</select></label>`).join('')}</div>
+        ${v.focus.filter(Boolean).map(name=>{const a=v.answers[name]||{};const bb=f=>b(`values.answers.${name}.${f}`);return `<div style="margin-top:12px"><span class="label">${esc(name)}</span>
+          <textarea class="lined" rows="2" ${bb('why')} placeholder="Why is it important to me and what does it include?" aria-label="Why">${esc(a.why||'')}</textarea>
+          <textarea class="lined" rows="2" ${bb('already')} placeholder="What do I already do that reflects it?" aria-label="Already">${esc(a.already||'')}</textarea>
+          <textarea class="lined" rows="2" ${bb('change')} placeholder="What should I stop or do more to live it better?" aria-label="Change">${esc(a.change||'')}</textarea></div>`;}).join('')}</div></section>`;
+    }
+  }
+  h+=`</article>`;
+  // habits
+  h+=`<article class="sheet" id="habits"><div class="dhead"><span class="label">Habits</span><h1 class="date">Habits I track</h1><p class="muted">These appear in step 8 of every day page and in the weekly tracker.</p></div>
+    <div class="habits">${p.habits.map((hb,i)=>`<div class="item"><input class="line" type="text" ${b('habits.'+i+'.name')} value="${esc(hb.name)}" aria-label="Habit name"><button class="x" data-act="hdel" data-i="${i}" aria-label="Remove habit">×</button></div>`).join('')||'<p class="small muted">No habits yet. Examples: 30 minutes of exercise, read 10 pages, no phone after 21:00.</p>'}</div>
+    <div class="row"><input class="line" style="max-width:20rem" type="text" id="newHabit" placeholder="New habit" aria-label="New habit"><button class="ghost small" data-act="hadd">Add habit</button></div></article>`;
+  return h;
+}
+
+function viewHistory(){
+  const p=profile(); const dates=[...S.days.keys()].sort().reverse();
+  const groups={};for(const d of dates){const k=d.slice(0,7);(groups[k]=groups[k]||[]).push(d);}
+  let h=banner()+`<article class="sheet"><div class="dhead"><span class="label">Archive</span><h1 class="date">All pages</h1><p class="muted">${dates.length} page${dates.length===1?'':'s'} written. Tap a day to open it.</p></div>`;
+  for(const [k,ds] of Object.entries(groups)){
+    h+=`<div class="month"><span class="label" style="padding:8px 0">${esc(parse(k+'-01').toLocaleDateString('en-GB',{month:'long',year:'numeric'}))}</span>${ds.map(d=>{const doc=S.days.get(d),s=dayStats(doc,p.habits);
+      const cls=!s.journaled?'':s.score>=70?'g':s.score>=40?'m':'l';
+      return `<button class="hrow" data-act="open-day" data-date="${d}"><span class="d">${esc(fmtShort(d))}<small>${esc(parse(d).toLocaleDateString('en-GB',{weekday:'short'}))}</small></span>
+        <span class="f">${filled(doc.focus.text)?(doc.focus.done?'✓ ':'')+esc(doc.focus.text):'<span class="muted">No focus set</span>'}</span>
+        ${s.journaled?`<span class="sc ${cls}">${s.score}</span>`:'<span class="small muted">empty</span>'}</button>`;}).join('')}</div>`;
+  }
+  h+=`</article>`;
+  if(NATIVE&&S.settings){const st=S.settings;
+    h+=`<article class="sheet"><div class="dhead"><span class="label">Settings</span><h1 class="date">Reminders &amp; startup</h1>
+      <p class="muted">The journal waits next to the clock (system tray) and shows a Windows notification at these times. Click the notification to open the journal.</p></div>
+      <div class="habits">
+        <label><input type="checkbox" data-set="Reminders" ${st.Reminders?'checked':''}> Remind me twice a day</label>
+        <div class="tags"><label>Morning reminder<input class="line" type="time" data-set="Morning" value="${esc(st.Morning)}" ${st.Reminders?'':'disabled'}></label>
+          <label>Evening reminder<input class="line" type="time" data-set="Evening" value="${esc(st.Evening)}" ${st.Reminders?'':'disabled'}></label></div>
+        <label><input type="checkbox" data-set="OpenOnReminder" ${st.OpenOnReminder?'checked':''}> Also open the journal window at reminder time</label>
+        <label><input type="checkbox" data-set="StartWithWindows" ${st.StartWithWindows?'checked':''}> Start with Windows (in the tray, so reminders work)</label>
+        <label><input type="checkbox" data-set="CloseToTray" ${st.CloseToTray?'checked':''}> Keep running in the tray when I close the window</label>
+      </div>${S.settingsMsg?`<p class="small">${esc(S.settingsMsg)}</p>`:''}</article>`;}
+  h+=`<article class="sheet"><div class="dhead"><span class="label">Files</span><h1 class="date">Your journal folder</h1>
+    <p class="muted">Everything is saved in <strong>${esc(S.dir?(S.dir.path||S.dir.name):'')}</strong>: <code>data</code> holds one file per day and week, <code>pages</code> holds a readable copy of every day that you can open on your phone in the OneDrive app.</p>
+    <p class="muted">A snapshot puts the whole journal into one file in <code>backups</code>. Import loads a snapshot or a backup from an earlier version.</p></div>
+    ${NATIVE?`<div class="row"><button class="ghost small" data-act="open-folder">Open folder</button><button class="ghost small" data-act="connect" data-mode="pick">Change folder</button></div>`:''}
+    ${CLOUD_MODE?`<p class="small muted">Signed in as <strong>${esc(Auth.user?(Auth.user.name||Auth.user.username):'')}</strong>${Auth.user&&Auth.user.name?` (${esc(Auth.user.username)})`:''}.</p><div class="row"><button class="ghost small" data-act="signout">Sign out</button></div>`:''}
+    <div class="row"><button class="btn" data-act="backup">Save snapshot</button><label class="ghost small" style="display:inline-flex;align-items:center;cursor:pointer">Import from file<input type="file" id="restoreFile" accept=".json,application/json" hidden></label></div>
+    ${S.backupMsg?`<p class="small">${esc(S.backupMsg)}</p>`:''}
+    ${S.restore?`<div class="confirm"><p>Backup from ${esc(S.restore.at||'unknown date')} with ${S.restore.counts}. Pages with the same date are replaced by the backup version. Other pages stay.</p><div class="row"><button class="btn danger" data-act="restore-yes">Restore backup</button><button class="ghost" data-act="restore-no">Cancel</button></div></div>`:''}
+    ${S.restoreMsg?`<p class="small">${esc(S.restoreMsg)}</p>`:''}</article>`;
+  return h;
+}
+
+function scoreChart(days){
+  const n=days.length;if(!n)return'';
+  const W=Math.max(300,Math.min(680,(window.innerWidth||680)-64)),H=170,pl=30,pr=6,pt=10,pb=24,iw=W-pl-pr,ih=H-pt-pb,step=iw/n,bw=Math.max(2,Math.min(18,step*0.7));
+  let g='';
+  for(const v of [0,50,100]){const y=pt+ih-ih*v/100;g+=`<line x1="${pl}" x2="${W-pr}" y1="${y}" y2="${y}" class="grid"/><text x="${pl-6}" y="${y+4}" class="axis" text-anchor="end">${v}</text>`;}
+  const every=Math.max(1,Math.ceil(n/6));
+  days.forEach((x,i)=>{const cx=pl+step*i+step/2;const sc=x.s&&x.s.journaled?x.s.score:null;
+    if(sc==null) g+=`<rect x="${(cx-bw/2).toFixed(1)}" y="${pt+ih-2}" width="${bw.toFixed(1)}" height="2" class="miss"><title>${fmtShort(x.date)}: no entry</title></rect>`;
+    else{const hh=Math.max(2,ih*sc/100);g+=`<rect x="${(cx-bw/2).toFixed(1)}" y="${(pt+ih-hh).toFixed(1)}" width="${bw.toFixed(1)}" height="${hh.toFixed(1)}" rx="1.5" class="${sc>=70?'b-good':sc>=40?'b-mid':'b-low'}"><title>${fmtShort(x.date)}: score ${sc}</title></rect>`;}
+    if(i%every===0||i===n-1){if(i!==n-1&&n-1-i<every*0.6)return;g+=`<text x="${cx.toFixed(1)}" y="${H-6}" class="axis" text-anchor="middle">${esc(fmtShort(x.date))}</text>`;}
+  });
+  return `<svg viewBox="0 0 ${W} ${H}" class="chart" role="img" aria-label="Daily score per day">${g}</svg>`;
+}
+function hbar(label,val,max,right,warn){const w=max?Math.round(100*val/max):0;return `<div class="hbar"><span>${esc(label)}</span><span class="track"><span class="fill ${warn?'warnf':''}" style="display:block;width:${w}%"></span></span><b>${right}</b></div>`;}
+function viewProgress(){
+  const r=analyse(S.range);
+  let h=banner()+`<article class="sheet"><div class="dhead"><div class="drow"><span class="label">Progress</span>
+    <span class="seg">${[[7,'7 days'],[30,'30 days'],[90,'90 days'],['all','All']].map(([k,l])=>`<button data-act="range" data-r="${k}" aria-pressed="${String(S.range)===String(k)}">${l}</button>`).join('')}</span></div>
+    <h1 class="date">Am I doing what I should?</h1><p class="muted">Based on ${r.journaled} journaled day${r.journaled===1?'':'s'} in ${esc(r.label)}.</p></div>
+    <div class="kpis">
+      <div class="kpi"><strong>${pctTxt(pct(r.focusDone,r.focusSet))}</strong><span>Daily focus completed</span></div>
+      <div class="kpi"><strong>${pctTxt(pct(r.todosDone,r.todos))}</strong><span>To-dos completed</span></div>
+      <div class="kpi"><strong>${r.scoreAvg}</strong><span>Average day score</span></div>
+      <div class="kpi"><strong>${r.streak}</strong><span>Day streak</span></div></div>
+    <div><span class="label">Day score</span>${scoreChart(r.days)}
+    <div class="legend"><span><i style="background:var(--accent)"></i>70 and above</span><span><i style="background:var(--gold)"></i>40 to 69</span><span><i style="background:var(--bad)"></i>below 40</span><span><i style="background:var(--line)"></i>no entry</span></div></div>
+    <div><span class="label">What the numbers say</span><ul class="insights">${r.insights.map(([c,tx])=>`<li class="${c}">${esc(tx)}</li>`).join('')}</ul></div></article>`;
+  const maxA=Math.max(1,...r.areas.map(a=>a.n));
+  h+=`<article class="sheet"><div class="dhead"><span class="label">Alignment</span><h1 class="date">Where your focus went</h1><p class="muted">Daily focus tasks per life area. Red marks an area that is in your vision but got no focus.</p></div>
+    <div>${r.areas.map(a=>hbar(a.name,a.n,maxA,a.n,a.vision&&a.n===0)).join('')}${r.untagged?`<p class="small muted">${r.untagged} focus task${r.untagged===1?' is':'s are'} not tagged with a life area.</p>`:''}</div>
+    ${r.values.length?`<div><span class="label">Focus tasks per value</span>${r.values.map(v=>hbar(v.name+(v.more?' ★':''),v.n,Math.max(1,...r.values.map(x=>x.n)),v.n,v.more&&v.n===0)).join('')}<p class="small muted">★ marks values you want to live more.</p></div>`:''}</article>`;
+  h+=`<article class="sheet"><div class="dhead"><span class="label">Routine</span><h1 class="date">Lists, rest and habits</h1></div>
+    <div>${hbar('Morning filled',r.mornings,r.n,pctTxt(pct(r.mornings,r.n)))}${hbar('Evening reflected',r.evenings,r.n,pctTxt(pct(r.evenings,r.n)))}
+    ${hbar('Tasks 2 and 3 done',r.creamDone,r.cream,pctTxt(pct(r.creamDone,r.cream)))}${hbar('Relax item done',r.relaxDays,r.journaled,pctTxt(pct(r.relaxDays,r.journaled)))}
+    ${r.ratingAvg!=null?hbar('Average day rating',r.ratingAvg,5,r.ratingAvg.toFixed(1)):''}</div>
+    ${r.habits.length?`<div class="tablewrap"><table><thead><tr><th>Habit</th><th>Done</th><th>Streak</th><th>Last 14 days</th></tr></thead><tbody>${r.habits.map(x=>`<tr><td>${esc(x.name)}</td><td>${pctTxt(x.rate)}</td><td>${x.streak}</td><td><span class="dots">${x.last.map(o=>`<i class="${o?'on':''}"></i>`).join('')}</span></td></tr>`).join('')}</tbody></table></div>`:''}
+    ${r.chronic.length?`<div><span class="label">Tasks you keep postponing</span><ul class="insights">${r.chronic.map(([t,n])=>`<li class="bad">${esc(t)} <span class="carried">↻ ${n}</span></li>`).join('')}</ul></div>`:''}
+    <div class="tablewrap"><table><thead><tr><th>Week</th><th>Days</th><th>Focus</th><th>To-dos</th><th>Score</th></tr></thead><tbody>${r.weeks.map(w=>`<tr><td><button class="linkbtn" data-act="open-week" data-m="${w.monday}">W${esc(w.id.split('-W')[1])} · ${esc(fmtShort(w.monday))}</button></td><td>${w.journaled}/${w.days}</td><td>${pctTxt(w.focus)}</td><td>${pctTxt(w.todos)}</td><td>${w.score}</td></tr>`).join('')}</tbody></table></div></article>`;
+  const revs=[...S.reviews.entries()].sort((a,b)=>b[1].createdAt-a[1].createdAt);
+  h+=`<article class="sheet"><div class="dhead"><span class="label">AI review</span><h1 class="date">Coaching review by Claude</h1>
+    <p class="muted">Two ways to get a review. In the Claude desktop app, open the Daily Plans folder and ask: <em>"Read the journal read-me and review my progress."</em> Claude reads every day file and can save its review into <code>data/reviews</code>, where it appears below. Or copy a ready-made summary of this period into any Claude chat.</p></div>
+    <div class="row"><button class="btn sec2" data-act="copy-prompt">Copy data for a Claude chat</button></div>
+    ${S.copyText?`<textarea class="code" readonly id="copyText">${esc(S.copyText)}</textarea>`:''}
+    <div class="ai-out" id="ai-out"></div>
+    ${revs.length?`<details><summary>Earlier reviews (${revs.length})</summary>${revs.map(([id,rv])=>`<div style="padding:10px 0;border-bottom:1px solid var(--rule)"><span class="label">${esc(new Date(rv.createdAt).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}))} · ${esc(rv.label||'')}</span><div class="ai-out">${md(rv.text)}</div></div>`).join('')}</details>`:''}</article>`;
+  return h;
+}
+function md(t){
+  const lines=esc(t).split('\n');let out='',list=null;
+  const inline=s=>s.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
+  const close=()=>{if(list){out+=`</${list}>`;list=null;}};
+  for(const raw of lines){const l=raw.trim();
+    if(/^#{1,4}\s/.test(l)){close();out+=`<h4>${inline(l.replace(/^#{1,4}\s/,''))}</h4>`;}
+    else if(/^[-*•]\s/.test(l)){if(list!=='ul'){close();out+='<ul>';list='ul';}out+=`<li>${inline(l.replace(/^[-*•]\s/,''))}</li>`;}
+    else if(/^\d+[.)]\s/.test(l)){if(list!=='ol'){close();out+='<ol>';list='ol';}out+=`<li>${inline(l.replace(/^\d+[.)]\s/,''))}</li>`;}
+    else if(!l){close();}
+    else{close();out+=`<p>${inline(l)}</p>`;}}
+  close();return out;
+}
+function buildPrompt(){
+  const p=profile(), r=analyse(S.range);
+  const vision=AREAS.map(([id,n])=>`- ${n}: ${p.vision.areas[id]||'(empty)'}`).join('\n');
+  const rk=rankedValues().map((x,i)=>`${i+1}. ${x.name}${p.values.status[x.name]==='more'?' (wants to live this more)':p.values.status[x.name]==='well'?' (lives it well)':''}`).join('\n')||'(values test not done)';
+  const ans=p.values.focus.filter(Boolean).map(n=>{const a=p.values.answers[n]||{};return `- ${n}: why: ${a.why||''}; already: ${a.already||''}; change: ${a.change||''}`;}).join('\n');
+  const stats={period:r.label,days:r.n,journaledDays:r.journaled,streak:r.streak,focusSet:r.focusSet,focusDone:r.focusDone,todos:r.todos,todosDone:r.todosDone,
+    tasks2and3:r.cream,tasks2and3Done:r.creamDone,relaxDays:r.relaxDays,eveningsReflected:r.evenings,averageDayRating:r.ratingAvg&&+r.ratingAvg.toFixed(2),averageDayScore:r.scoreAvg,
+    focusPerLifeArea:Object.fromEntries(r.areas.map(a=>[a.name,a.n])),focusPerValue:Object.fromEntries(r.values.map(v=>[v.name,v.n])),
+    habits:r.habits.map(h=>({habit:h.name,donePercent:h.rate,streak:h.streak})),postponedTasks:r.chronic.map(([t,n])=>({task:t,timesMoved:n})),
+    weeks:r.weeks.map(w=>({week:w.id,journaled:w.journaled,focusPercent:w.focus,todoPercent:w.todos,score:w.score}))};
+  const recent=r.days.slice(-14).filter(x=>x.doc&&x.s.journaled).map(x=>{const d=x.doc;return{date:x.date,grateful:d.grateful.filter(filled),focus:d.focus.text,focusDone:d.focus.done,
+    area:AREA[d.focus.area]||'',value:d.focus.value,tasks:[...d.cream,...d.cherries].filter(t=>filled(t.text)).map(t=>(t.done?'[x] ':'[ ] ')+t.text),
+    relax:d.relax.filter(t=>filled(t.text)).map(t=>(t.done?'[x] ':'[ ] ')+t.text),win:d.evening.win,bestMoment:d.evening.moment,learned:d.evening.learned,rating:d.evening.rating,score:x.s.score};});
+  const wk=S.weeks.get(isoWeek(S.date));
+  return `You are an honest, warm coach for a person who keeps a daily journal based on the 6-Minute Success Journal method (daily focus task, tasks 2 and 3, to-relax list, gratitude, habits, evening reflection, life vision and personal values).
+Write a progress review in English for ${r.label}. Use short plain sentences. Never use dashes in the middle of a sentence. Refer to concrete entries and numbers from the data. If the data is thin, say so and explain what to record for a better review next time.
+Use exactly these headings, each line starting with "## ":
+## Overall
+## Are you working on what matters?
+(compare daily focus tasks with the vision areas and the values the person wants to live more)
+## Patterns
+(what helps good days, what drags bad days, postponed tasks, rest, habits)
+## Three actions for next week
+(numbered, concrete, small enough to start tomorrow)
+## A question to reflect on
+Keep the whole review under 420 words.
+
+VISION (${p.vision.horizon}):
+${vision}
+
+VALUES (ranked):
+${rk}
+${ans?`\nVALUES BEING WORKED ON:\n${ans}\n`:''}
+HABITS: ${p.habits.map(h=>h.name).join(', ')||'(none)'}
+
+STATISTICS (day score: focus done 40, tasks 2 and 3 done 20, a relax item done 15, habits 15, evening reflection 10):
+${JSON.stringify(stats)}
+
+THIS WEEK'S NOTES: ${wk?JSON.stringify({wins:wk.wins,notes:wk.notes,reflection:wk.reflection}):'(none)'}
+
+LAST 14 DAYS:
+${JSON.stringify(recent)}`;
+}
+
+/* ---------- backup ---------- */
+function backupName(){return `${S.date.replaceAll('-','')}-6 Minute Journal-Backup-v1.json`;}
+function backupJSON(){const o={app:'6-minute-journal',format:1,exportedAt:new Date().toISOString()};for(const c of COLS)o[c]=Object.fromEntries([...S[c].entries()].filter(([id,v])=>c!=='weeks'||v.updatedAt));return JSON.stringify(o);}
+
+/* ---------- events ---------- */
+document.addEventListener('input',e=>{
+  const el=e.target.closest('[data-b]');if(!el)return;
+  const parts=el.dataset.b.split('/');const col=parts[0],id=parts[1],path=parts.slice(2).join('/');
+  const doc=S[col].get(id);if(!doc)return;
+  const val=el.type==='checkbox'?el.checked:el.value;
+  setPath(doc,path,val);
+  scheduleSave(col,id,el.type==='checkbox'||el.tagName==='SELECT'?150:700);
+  if('rerender' in el.dataset) render();
+});
+document.addEventListener('change',async e=>{
+  const set=e.target.closest('[data-set]');
+  if(set&&NATIVE&&S.settings){
+    const k=set.dataset.set;
+    if(set.type==='checkbox') S.settings[k]=set.checked;
+    else if(/^\d{2}:\d{2}$/.test(set.value)) S.settings[k]=set.value;
+    else return;
+    try{await NATIVE.SaveSettings(JSON.stringify(S.settings));S.settingsMsg='Settings saved.';}
+    catch(err){S.settingsMsg='Settings could not be saved.';}
+    render();return;
+  }
+  if(e.target.id!=='restoreFile')return;
+  const f=e.target.files&&e.target.files[0];if(!f)return;
+  try{const o=JSON.parse(await f.text());if(!o||typeof o.days!=='object')throw 0;
+    const n=c=>Object.keys(o[c]||{}).length;
+    S.restore={data:o,at:o.exportedAt?new Date(o.exportedAt).toLocaleString('en-GB'):'',counts:`${n('days')} day pages, ${n('weeks')} weeks and ${n('reviews')} reviews`};S.restoreMsg='';}
+  catch(err){S.restore=null;S.restoreMsg='This file is not a journal backup. Choose a file saved with "Save backup file".';}
+  render();
+});
+document.querySelectorAll('[data-tab]').forEach(b=>b.addEventListener('click',()=>{S.tab=b.dataset.tab;lsSet('smj6:tab',S.tab);S.confirm=false;render();window.scrollTo(0,0);}));
+let rz;window.addEventListener('resize',()=>{clearTimeout(rz);rz=setTimeout(()=>{if(S.tab==='progress'&&!typing())render();},250);});
+// Coming back to the tab: pick up a new date and any files changed elsewhere (another PC, or Claude writing a review).
+window.addEventListener('online',()=>{if(store&&Object.keys(saveQ).length)A.retry();});
+document.addEventListener('visibilitychange',async()=>{
+  if(document.hidden||!store) return;
+  if(!Object.keys(saveQ).length&&!typing()){try{await loadAll();}catch(e){console.warn('reload failed',e);}}
+  if(todayStr()!==S.date) ensureTimeline();
+  if(!typing()) render();
+});
+setInterval(checkDate,5*60*1000);
+
+const A={
+  tab(a){S.tab=a.dataset.tab;lsSet('smj6:tab',S.tab);render();if(a.dataset.anchor){const el=document.getElementById(a.dataset.anchor);if(el)el.scrollIntoView();}else window.scrollTo(0,0);},
+  'day-go'(a){S.cur=addDays(S.cur,+a.dataset.d);S.confirm=false;render();},
+  'day-today'(){S.cur=S.date;S.confirm=false;render();},
+  'day-create'(){const d=newDay(S.cur);if(S.cur<S.date){d.status='closed';S.unlocked.add(S.cur);}S.days.set(S.cur,d);scheduleSave('days',S.cur,50);render();},
+  'open-day'(a){S.cur=a.dataset.date;S.tab='day';S.confirm=false;render();window.scrollTo(0,0);},
+  'open-week'(a){S.weekMon=a.dataset.m;S.tab='week';render();window.scrollTo(0,0);},
+  add(a){const d=S.days.get(S.cur);d[a.dataset.list].push(a.dataset.list==='relax'?{text:'',done:false}:todo());scheduleSave('days',S.cur,300);render();
+    const ins=document.querySelectorAll(`[data-b^="days/${S.cur}/${a.dataset.list}."][type=text]`);if(ins.length)ins[ins.length-1].focus();},
+  'del-item'(a){const d=S.days.get(S.cur);d[a.dataset.list].splice(+a.dataset.i,1);scheduleSave('days',S.cur,150);render();},
+  rate(a){const d=S.days.get(S.cur);const n=+a.dataset.n;d.evening.rating=d.evening.rating===n?0:n;scheduleSave('days',S.cur,150);render();},
+  wrate(a){const wid=isoWeek(S.weekMon);const w=S.weeks.get(wid);const n=+a.dataset.n;w.reflection.rating=w.reflection.rating===n?0:n;scheduleSave('weeks',wid,150);render();},
+  unlock(){S.unlocked.add(S.cur);render();},
+  lock(){S.unlocked.delete(S.cur);render();},
+  finish(){S.confirm=true;render();},
+  'finish-no'(){S.confirm=false;render();},
+  'finish-yes'(){const date=S.cur,d=S.days.get(date),next=addDays(date,1);
+    d.status='closed';d.closedAt=Date.now();
+    if(!S.days.has(next))S.days.set(next,newDay(next));
+    const nd=S.days.get(next);if(nd.status==='closed'){nd.status='open';}
+    carry(d,nd);scheduleSave('days',date,60);scheduleSave('days',next,60);
+    S.confirm=false;S.cur=next;render();window.scrollTo(0,0);},
+  'week-go'(a){S.weekMon=addDays(S.weekMon,+a.dataset.d);render();},
+  'week-now'(){S.weekMon=mondayOf(S.date);render();},
+  wh(a){const date=a.dataset.date,hid=a.dataset.h;let d=S.days.get(date);
+    if(!d){d=newDay(date);if(date<S.date)d.status='closed';S.days.set(date,d);}
+    d.habits[hid]=a.checked;scheduleSave('days',date,150);},
+  vpick(a){const v=profile().values,x=a.dataset.v;if(v.selected.includes(x)){v.selected=v.selected.filter(y=>y!==x);v.top=v.top.filter(y=>y!==x);}else if(v.selected.length<10)v.selected.push(x);scheduleSave('meta','profile',300);render();},
+  vadd(){const el=$('#newValue');const x=(el&&el.value||'').trim();if(!x)return;const v=profile().values;if(![...VALUES,...v.custom].some(y=>y.toLowerCase()===x.toLowerCase()))v.custom.push(x);if(!v.selected.includes(x)&&v.selected.length<10)v.selected.push(x);scheduleSave('meta','profile',300);render();},
+  vstar(a){const v=profile().values,x=a.dataset.v;if(v.top.includes(x))v.top=v.top.filter(y=>y!==x);else if(v.top.length<5)v.top.push(x);scheduleSave('meta','profile',300);render();},
+  pair(a){profile().values.pairs[a.dataset.k]=a.dataset.v;scheduleSave('meta','profile',300);render();},
+  vstatus(a){const st=profile().values.status;st[a.dataset.v]=st[a.dataset.v]===a.dataset.s?'':a.dataset.s;scheduleSave('meta','profile',300);render();},
+  hadd(){const el=$('#newHabit');const x=(el&&el.value||'').trim();if(!x)return;profile().habits.push({id:'h'+Date.now().toString(36),name:x});scheduleSave('meta','profile',150);render();},
+  hdel(a){profile().habits.splice(+a.dataset.i,1);scheduleSave('meta','profile',150);render();},
+  range(a){S.range=a.dataset.r==='all'?'all':+a.dataset.r;render();},
+  'copy-prompt'(){const t=buildPrompt();S.copyText='';
+    const fallback=()=>{S.copyText=t;render();const el=$('#copyText');if(el){el.focus();el.select();}};
+    try{navigator.clipboard.writeText(t).then(()=>{const o=$('#ai-out');if(o)o.innerHTML='<p class="muted">Copied. Paste it into a new Claude chat.</p>';},fallback);}catch(e){fallback();}},
+  async backup(){
+    try{await store.writeText('backups',backupName(),backupJSON());S.backupMsg=`Snapshot saved as backups/${backupName()}.`;}
+    catch(e){S.backupMsg='The snapshot could not be saved. Check that the folder still exists.';}
+    render();},
+  async 'open-folder'(){try{await NATIVE.OpenFolder();}catch(e){}},
+  async signin(){parkPending();await Auth.login();},
+  signout(){Auth.signOut();},
+  async connect(a){
+    S.connectMsg='';
+    if(NATIVE){
+      if(Object.keys(saveQ).length){S.connectMsg='Wait a moment until all changes are saved.';render();return;}
+      try{const p=await NATIVE.ChooseFolder();if(p) return openFolder({name:p.split('\\').pop(),path:p});}
+      catch(e){S.connectMsg='The folder could not be opened. Choose it again.';render();}
+      return;
+    }
+    try{
+      if(S.savedDir&&a.dataset.mode!=='pick'){
+        const p=await S.savedDir.requestPermission({mode:'readwrite'});
+        if(p==='granted') return openFolder(S.savedDir);
+      }
+      const h=await window.showDirectoryPicker({id:'smj6-journal',mode:'readwrite'});
+      await IDB.set('dir',h); S.savedDir=h; return openFolder(h);
+    }catch(e){if(e&&e.name!=='AbortError'){S.connectMsg='The folder could not be opened. Try again or choose the folder again.';render();}}
+  },
+  'restore-no'(){S.restore=null;render();},
+  async 'restore-yes'(){const o=S.restore.data;S.restore=null;S.restoreMsg='Restoring…';render();let n=0,fail=0;
+    for(const c of COLS){const src=o[c]||{};for(const [id,data] of Object.entries(src)){if(!data||typeof data!=='object')continue;
+      if(c==='days')normDay(data);if(c==='weeks')normWeek(data);S[c].set(id,data);
+      try{await store.set(c,id,JSON.parse(JSON.stringify(data)));n++;}catch(e){fail++;}}}
+    S.restoreMsg=`Restored ${n} items.${fail?` ${fail} could not be saved.`:''}`;ensureTimeline();render();},
+  retry(){if(CLOUD_MODE&&S.needLogin){A.signin();return;}
+    for(const k of Object.keys(saveQ)){const [c,id]=k.split('/');saveQ[k].failed=false;flush(c,id);}}
+};
+document.addEventListener('click',e=>{const a=e.target.closest('[data-act]');if(!a||a.disabled)return;const f=A[a.dataset.act];if(f)f(a,e);});
+
+/* ---------- boot ---------- */
+// Reads every collection into fresh maps first, so a failed read never wipes what is on screen.
+async function loadAll(){
+  const next={};for(const c of COLS){next[c]=new Map();for(const {id,data} of await store.all(c))next[c].set(id,data);}
+  for(const c of COLS)S[c]=next[c];
+  for(const d of S.days.values())normDay(d);
+  for(const w of S.weeks.values())normWeek(w);
+}
+async function openFolder(h){
+  const prev=store;S.dir=h;store=NATIVE?nativeStore():CLOUD_MODE?graphStore():fsStore(h);
+  $('#main').innerHTML=`<p class="loading">${CLOUD_MODE?'Loading your journal from OneDrive…':'Reading your journal folder…'}</p>`;
+  try{await loadAll();}
+  catch(e){console.warn('folder read failed',e);store=prev;
+    S.connectMsg=CLOUD_MODE?(e&&e.code==='auth'?'Your sign-in has expired. Sign in again.':'Your OneDrive could not be read. Check the internet connection and sign in again.')
+      :'The folder could not be read. Choose the Daily Plans folder again.';
+    render();return;}
+  if(CLOUD_MODE) restorePending();
+  ensureTimeline();refreshStatus();render();
+}
+async function boot(){
+  const t=lsGet('smj6:tab');if(t&&['day','week','progress','me','history'].includes(t))S.tab=t;
+  if(CLOUD_MODE){
+    if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
+    Auth.load();
+    let r='none';
+    try{r=await Auth.handleRedirect();}catch(e){console.warn('sign-in failed',e);S.connectMsg='Sign-in did not complete: '+(e.message||'unknown error');}
+    if(r==='none'&&Auth.t&&!(await Auth.token())&&!lsGet('smj6:silent')){
+      // Session ran out: try one silent sign-in (no prompt) before showing the button.
+      lsSet('smj6:silent','1');return Auth.login('none');
+    }
+    try{localStorage.removeItem('smj6:silent');}catch(e){}
+    if(await Auth.token()) return openFolder({name:'OneDrive',path:'OneDrive › Apps › 6-Minute Journal'});
+    return render();
+  }
+  if(NATIVE){
+    $('[data-tab="history"]').textContent='Archive & settings';
+    try{S.settings=JSON.parse(await NATIVE.GetSettings());const f=await NATIVE.GetFolder();
+      if(f) return openFolder({name:f.split('\\').pop(),path:f});}
+    catch(e){console.warn('host not ready',e);S.connectMsg='The journal folder could not be read. Choose it again.';}
+    return render();
+  }
+  if('showDirectoryPicker' in window){
+    S.savedDir=await IDB.get('dir');
+    if(S.savedDir){let p='prompt';try{p=await S.savedDir.queryPermission({mode:'readwrite'});}catch(e){}
+      if(p==='granted') return openFolder(S.savedDir);}
+  }
+  render();
+}
+boot();
+})();
+</script>
