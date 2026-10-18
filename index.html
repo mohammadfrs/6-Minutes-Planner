@@ -384,7 +384,7 @@ const NATIVE=(window.chrome&&window.chrome.webview&&window.chrome.webview.hostOb
 /* ---------- web app: Microsoft sign-in + OneDrive app folder ----------
    Used when the page is served over https (GitHub Pages) and a client ID is configured.
    Each user's journal lives in their own OneDrive at Apps/<app name>/, same layout as the Windows app folder. */
-const APP_VERSION='2026-10-18 folder window + help';
+const APP_VERSION='2026-10-18 reliable download';
 const CLOUD={clientId:'8b0e5366-6e9a-48c1-930b-9553783f2e0b',authority:'https://login.microsoftonline.com/common/oauth2/v2.0',
   scopes:'openid profile offline_access Files.ReadWrite.AppFolder'};
 // CLOUD_AVAILABLE: this page can use Microsoft sign-in. CLOUD_MODE: this device currently uses it.
@@ -463,30 +463,40 @@ function graphStore(){
     if(!r.ok) throw new Error('OneDrive save failed ('+r.status+')');
     return r.json();
   }
-  // Downloads a file's text; a failed download throws instead of being treated as "no page".
-  async function download(urlStr){
-    for(let i=0;i<2;i++){const r=await fetch(urlStr,{cache:'no-store'});if(r.ok) return r.text();if(i) throw new Error('OneDrive download failed ('+r.status+')');}
+  // Downloads a file's text. First via the item's temporary download link; if the browser cannot use that link
+  // (some work accounts block it), through Microsoft Graph itself. A failed download throws, it is never "no page".
+  async function download(item){
+    let why='';
+    if(item['@microsoft.graph.downloadUrl']){
+      try{const r=await fetch(item['@microsoft.graph.downloadUrl']);if(r.ok) return r.text();why='link '+r.status;}
+      catch(e){why='link blocked';}
+    }
+    try{const r=await graph(`/me/drive/items/${encodeURIComponent(item.id)}/content`);if(r.ok) return r.text();why+=', graph '+r.status;}
+    catch(e){if(e&&e.code==='auth') throw e;why+=', graph blocked';}
+    throw new Error('OneDrive download failed ('+why+')');
   }
   return{
     async all(c){
-      let url=`${root}data/${c}:/children?$select=name,eTag,file,@microsoft.graph.downloadUrl&$top=999`, items=[];
+      let url=`${root}data/${c}:/children?$select=id,name,eTag,file,@microsoft.graph.downloadUrl&$top=999`, items=[];
       while(url){const r=await graph(url);if(r.status===404) break;if(!r.ok) throw new Error('OneDrive list failed ('+r.status+')');
         const j=await r.json();items.push(...j.value);url=j['@odata.nextLink']?j['@odata.nextLink'].replace('https://graph.microsoft.com/v1.0',''):null;}
       items=items.filter(it=>it.file&&it.name.endsWith('.json'));
       const out=[], seen=new Set();
       await pool(items,6,async it=>{const k=c+'/'+it.name;seen.add(k);let text;
         if(cache[k]&&cache[k].etag===it.eTag) text=cache[k].text;
-        else{text=await download(it['@microsoft.graph.downloadUrl']);cache[k]={etag:it.eTag,text};}
+        else{text=await download(it);cache[k]={etag:it.eTag,text};}
         let data;try{data=JSON.parse(text);}catch(e){throw new Error('A journal file is damaged: '+k);}
         out.push({id:it.name.slice(0,-5),data,etag:it.eTag});});
       for(const k of Object.keys(cache)) if(k.startsWith(c+'/')&&!seen.has(k)) delete cache[k];
       keep();return out;},
     // Latest version of one file, or null if it does not exist.
     async get(c,id){
-      const r=await graph(`${root}${enc(`data/${c}/${id}.json`)}?$select=eTag,@microsoft.graph.downloadUrl`,{cache:'no-store'});
+      const r=await graph(`${root}${enc(`data/${c}/${id}.json`)}`);
       if(r.status===404) return null;
       if(!r.ok) throw new Error('OneDrive read failed ('+r.status+')');
-      const j=await r.json();const text=await download(j['@microsoft.graph.downloadUrl']);
+      const j=await r.json();
+      const hit=cache[`${c}/${id}.json`];
+      const text=hit&&hit.etag===j.eTag?hit.text:await download(j);
       cache[`${c}/${id}.json`]={etag:j.eTag,text};keep();
       return{data:JSON.parse(text),etag:j.eTag};
     },
@@ -696,7 +706,8 @@ async function openDay(date){
         if(r){const d=normDay(r.data);S.days.set(date,d);const b=JSON.parse(JSON.stringify(d));S.base.set(k,{etag:r.etag,data:b});}
         else if(S.days.has(date)){S.days.delete(date);S.base.delete(k);}
       }
-    }catch(e){S.dayMsg=e&&e.code==='auth'?'Your sign-in expired. Sign in again to load this page.':'The latest version could not be loaded from OneDrive. Check the connection.';}
+    }catch(e){console.warn('openDay failed',e);S.dayMsg=e&&e.code==='auth'?'Your sign-in expired. Sign in again to load this page.'
+      :`The latest version of this page could not be loaded, so it is shown as last loaded. Details: ${e&&e.message||e}`;}
     S.loadingDay=null;
   }
   render();window.scrollTo(0,0);
@@ -824,7 +835,7 @@ function viewDay(){
   const chips=[rl?`<span class="chip">${rl}</span>`:'',arch?`<span class="chip locked">${locked?'Archived':'Archived · editing'}</span>`:''].join('');
   const head=`<div class="dhead"><div class="drow"><ol class="wd" aria-label="Weekday">${WD.map((w,k)=>`<li class="${k===dow(date)?'on':''}">${w}</li>`).join('')}</ol>${nav}</div>
     <h1 class="date">${esc(fmtLong(date))}</h1><div class="row">${chips}</div></div>
-    ${S.dayMsg?`<p class="err">${esc(S.dayMsg)}</p>`:''}
+    ${S.dayMsg?`<div class="row"><p class="err" style="flex:1 1 16rem">${esc(S.dayMsg)}</p><button class="ghost small" data-act="open-day" data-date="${date}">Try again</button></div>`:''}
     <blockquote class="quote"><p>${esc(q[0])}</p><cite>${esc(q[1])}</cite></blockquote>`;
   if(S.loadingDay===date) return banner()+`<article class="sheet">${head}<p class="loading">Loading the saved page…</p></article>`;
   if(!d) return banner()+`<article class="sheet">${head}<div class="empty"><h3>This page is empty</h3>
@@ -1436,7 +1447,7 @@ async function openFolder(h){
   $('#main').innerHTML=`<p class="loading">${CLOUD_MODE?'Loading your journal from OneDrive…':'Reading your journal folder…'}</p>`;
   try{await loadAll();}
   catch(e){console.warn('folder read failed',e);store=prev;
-    S.connectMsg=CLOUD_MODE?(e&&e.code==='auth'?'Your sign-in has expired. Sign in again.':'Your OneDrive could not be read. Check the internet connection and sign in again.')
+    S.connectMsg=CLOUD_MODE?(e&&e.code==='auth'?'Your sign-in has expired. Sign in again.':`Your OneDrive could not be read, so nothing was changed. Details: ${e&&e.message||e}`)
       :'The folder could not be read. Choose the Daily Plans folder again.';
     render();return;}
   if(CLOUD_MODE) restorePending();
