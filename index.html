@@ -137,7 +137,7 @@ details.help summary{font-family:var(--f-display);font-size:1.05rem;font-weight:
 .faq{margin:0;display:flex;flex-direction:column;gap:4px}
 .faq dt{font-weight:600;margin-top:6px}
 .faq dd{margin:0 0 0 0;color:var(--muted)}
-.cal{display:flex;flex-direction:column;gap:4px}
+.mcal{display:flex;flex-direction:column;gap:4px;min-width:0}
 .cal-head,.cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}
 .cal-head span{font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600;text-align:center;padding:2px 0}
 .cal-cell{min-height:76px;border:1px solid var(--rule);border-radius:4px;background:var(--sheet);padding:5px 6px;display:flex;flex-direction:column;align-items:flex-start;gap:3px;cursor:pointer;text-align:left;min-width:0;font:inherit;color:inherit}
@@ -384,7 +384,7 @@ const NATIVE=(window.chrome&&window.chrome.webview&&window.chrome.webview.hostOb
 /* ---------- web app: Microsoft sign-in + OneDrive app folder ----------
    Used when the page is served over https (GitHub Pages) and a client ID is configured.
    Each user's journal lives in their own OneDrive at Apps/<app name>/, same layout as the Windows app folder. */
-const APP_VERSION='2026-10-18 reliable download';
+const APP_VERSION='2026-10-18 calendar aligned';
 const CLOUD={clientId:'8b0e5366-6e9a-48c1-930b-9553783f2e0b',authority:'https://login.microsoftonline.com/common/oauth2/v2.0',
   scopes:'openid profile offline_access Files.ReadWrite.AppFolder'};
 // CLOUD_AVAILABLE: this page can use Microsoft sign-in. CLOUD_MODE: this device currently uses it.
@@ -1004,7 +1004,7 @@ function viewCalendar(){
     <div class="daynav"><button class="ghost" data-act="cal-go" data-d="-1" aria-label="Previous month">‹</button><button class="ghost small" data-act="cal-now" ${isNow?'disabled':''}>This month</button><button class="ghost" data-act="cal-go" data-d="1" aria-label="Next month">›</button></div></div>
     <h1 class="date">${esc(title)}</h1>
     <p class="muted">${written?`${written} day${written===1?'':'s'} written · average score ${Math.round(scoreSum/written)} · daily focus done on ${focusDone} day${focusDone===1?'':'s'}.`:'No pages written this month yet.'} Click a day to open or create its page.</p></div>
-    <div class="cal"><div class="cal-head">${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d=>`<span>${d}</span>`).join('')}</div><div class="cal-grid">${cells}</div></div>
+    <div class="mcal"><div class="cal-head">${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d=>`<span>${d}</span>`).join('')}</div><div class="cal-grid">${cells}</div></div>
     <div class="legend"><span><i style="background:var(--accent)"></i>score 70 and above</span><span><i style="background:var(--gold)"></i>40 to 69</span><span><i style="background:var(--bad)"></i>below 40</span><span><i style="border:2px solid var(--accent);background:transparent"></i>today</span></div>
     ${isNow?`<div class="row"><button class="btn" data-act="open-day" data-date="${S.date}">Open today</button></div>`:''}</article>`;
 }
