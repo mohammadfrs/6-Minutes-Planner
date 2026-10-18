@@ -126,6 +126,17 @@ input[type=checkbox]{width:20px;height:20px;accent-color:var(--accent);margin:0}
 .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .finish{border-top:1px solid var(--line);padding-top:16px;display:flex;flex-direction:column;gap:10px}
 .confirm{background:var(--accent-soft);border-radius:4px;padding:12px 14px;display:flex;flex-direction:column;gap:10px}
+.help-toc{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:.86rem}
+.help-toc a{color:var(--accent);text-decoration:none;font-weight:600}
+.help-toc a:hover{text-decoration:underline}
+details.help{border-top:1px solid var(--rule);padding:10px 0}
+details.help summary{font-family:var(--f-display);font-size:1.05rem;font-weight:600;cursor:pointer;list-style-position:outside}
+.help-b{padding-top:8px;display:flex;flex-direction:column;gap:8px;max-width:68ch}
+.help-b ul,.help-b ol{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px}
+.help-b code{background:var(--paper);padding:1px 5px;border-radius:3px;font-size:.88em;word-break:break-word}
+.faq{margin:0;display:flex;flex-direction:column;gap:4px}
+.faq dt{font-weight:600;margin-top:6px}
+.faq dd{margin:0 0 0 0;color:var(--muted)}
 .cal{display:flex;flex-direction:column;gap:4px}
 .cal-head,.cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}
 .cal-head span{font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600;text-align:center;padding:2px 0}
@@ -247,6 +258,7 @@ textarea.code{width:100%;min-height:140px;font-family:ui-monospace,Consolas,mono
       <button data-tab="me">Vision &amp; values</button>
       <button data-tab="history">Archive</button>
       <button data-tab="settings">Settings</button>
+      <button data-tab="help">Help</button>
     </nav>
   </div>
 </header>
@@ -372,10 +384,14 @@ const NATIVE=(window.chrome&&window.chrome.webview&&window.chrome.webview.hostOb
 /* ---------- web app: Microsoft sign-in + OneDrive app folder ----------
    Used when the page is served over https (GitHub Pages) and a client ID is configured.
    Each user's journal lives in their own OneDrive at Apps/<app name>/, same layout as the Windows app folder. */
-const APP_VERSION='2026-10-18 calendar';
+const APP_VERSION='2026-10-18 folder window + help';
 const CLOUD={clientId:'8b0e5366-6e9a-48c1-930b-9553783f2e0b',authority:'https://login.microsoftonline.com/common/oauth2/v2.0',
   scopes:'openid profile offline_access Files.ReadWrite.AppFolder'};
-const CLOUD_MODE=!NATIVE&&location.protocol==='https:'&&!CLOUD.clientId.startsWith('__');
+// CLOUD_AVAILABLE: this page can use Microsoft sign-in. CLOUD_MODE: this device currently uses it.
+// On a PC, Settings can switch the device to a folder chosen in the Windows folder window (stored per device).
+const CLOUD_AVAILABLE=!NATIVE&&location.protocol==='https:'&&!CLOUD.clientId.startsWith('__');
+const PICKER=('showDirectoryPicker' in window);
+let CLOUD_MODE=CLOUD_AVAILABLE&&!(PICKER&&(()=>{try{return localStorage.getItem('smj6:mode')==='folder';}catch(e){return false;}})());
 const REDIRECT=location.origin+location.pathname.replace(/index\.html$/,'');
 const b64url=buf=>btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
 const randomStr=n=>b64url(crypto.getRandomValues(new Uint8Array(n)));
@@ -537,14 +553,29 @@ function fsStore(root){
     const d=await dir(path);const fh=await d.getFileHandle(name,{create:true});
     const w=await fh.createWritable();await w.write(text);await w.close();
   }
+  // A folder has no version tags, so a fingerprint of the file content stands in for one:
+  // a save only goes through if the file still has the content this device last loaded.
+  const tag=s=>{let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return (h>>>0).toString(36)+'.'+s.length;};
+  async function readOrNull(c,id){
+    const d=await dir('data/'+c);
+    try{return await (await (await d.getFileHandle(id+'.json')).getFile()).text();}
+    catch(e){if(e&&e.name==='NotFoundError') return null;throw e;}
+  }
   return{
     async all(c){const d=await dir('data/'+c);const out=[];
       for await(const [name,h] of d.entries()){
         if(h.kind!=='file'||!name.endsWith('.json')) continue;
-        try{out.push({id:name.slice(0,-5),data:JSON.parse(await (await h.getFile()).text())});}catch(e){console.warn('Skipped unreadable file',name,e);}
+        const text=await (await h.getFile()).text();
+        let data;try{data=JSON.parse(text);}catch(e){throw new Error('A journal file is damaged: '+c+'/'+name);}
+        out.push({id:name.slice(0,-5),data,etag:tag(text)});
       }
       return out;},
-    set:(c,id,data)=>writeText('data/'+c,id+'.json',JSON.stringify(data,null,2)),
+    async get(c,id){const text=await readOrNull(c,id);return text===null?null:{data:JSON.parse(text),etag:tag(text)};},
+    async set(c,id,data,etag,force){
+      if(!force){const cur=await readOrNull(c,id);
+        if(etag?(cur===null||tag(cur)!==etag):cur!==null) throw Object.assign(new Error('Changed elsewhere'),{code:'conflict'});}
+      const text=JSON.stringify(data,null,2);await writeText('data/'+c,id+'.json',text);return{etag:tag(text)};
+    },
     async del(c,id){const d=await dir('data/'+c);try{await d.removeEntry(id+'.json');}catch(e){}},
     writeText
   };
@@ -756,6 +787,7 @@ function render(){
   pendingRender=false;
   document.querySelectorAll('[data-tab]').forEach(b=>b.setAttribute('aria-current',b.dataset.tab===S.tab?'page':'false'));
   const v=S.tab, m=$('#main');
+  if(v==='help'){m.innerHTML=viewHelp();return;} // Help works before signing in too
   if(!store){m.innerHTML=viewConnect();return;}
   m.innerHTML=(v==='week'?viewWeek():v==='me'?viewMe():v==='history'?viewHistory():v==='progress'?viewProgress():v==='settings'?viewSettings():v==='calendar'?viewCalendar():viewDay());
 }
@@ -763,8 +795,8 @@ const banner=()=>'';
 function viewConnect(){
   if(CLOUD_MODE) return `<article class="sheet"><div class="dhead"><span class="label">Welcome</span><h1 class="date">Your private 6-Minute Journal</h1>
     <p class="muted">Sign in with your Microsoft account (work or personal). Your journal is saved only in your own OneDrive, in the folder <code>Apps › 6-Minute Journal</code>. The app cannot see any of your other files, and nobody else can read your entries.</p></div>
-    <div class="row"><button class="btn" data-act="signin">Sign in with Microsoft</button></div>
-    <p class="small muted">Tip: on the phone, use "Add to Home Screen" in the browser menu to open the journal like an app.</p>
+    <div class="row"><button class="btn" data-act="signin">Sign in with Microsoft</button>${PICKER?'<button class="ghost small" data-act="connect" data-mode="pick">Choose a folder on this PC instead…</button>':''}</div>
+    <p class="small muted">Tip: on the phone, use "Add to Home Screen" in the browser menu to open the journal like an app. New here? Open <button class="linkbtn" data-act="tab" data-tab="help">Help</button> for a step-by-step guide.</p>
     ${S.connectMsg?`<p class="err">${esc(S.connectMsg)}</p>`:''}</article>`;
   if(NATIVE) return `<article class="sheet"><div class="dhead"><span class="label">Welcome</span><h1 class="date">Choose your journal folder</h1>
     <p class="muted">Every day is saved as its own file in a folder you choose. A folder inside OneDrive is a good choice because it is backed up automatically. If you already used the journal, choose the folder that contains its <code>data</code> folder.</p></div>
@@ -775,8 +807,8 @@ function viewConnect(){
   const h=S.savedDir;
   return `<article class="sheet"><div class="dhead"><span class="label">Journal folder</span><h1 class="date">${h?'Open your journal':'Choose your journal folder'}</h1>
     <p class="muted">${h?`Your journal is saved in the folder <strong>${esc(h.name)}</strong>. Your browser asks once per session before the page may use it. Choose "Allow on every visit" to skip this step next time.`
-      :'Choose the <strong>Daily Plans</strong> folder in your OneDrive (the folder that contains this app file). Every day is saved there as its own file, so Claude can read them for analysis.'}</p></div>
-    <div class="row"><button class="btn" data-act="connect">${h?`Open ${esc(h.name)}`:'Choose folder'}</button>${h?'<button class="ghost small" data-act="connect" data-mode="pick">Use a different folder</button>':''}</div>
+      :`Click <strong>Choose folder…</strong>, browse to the folder for your journal in the Windows folder window and click <strong>Select Folder</strong>.${CLOUD_AVAILABLE?' To stay in sync with your phone, choose <code>OneDrive - ICODOS GmbH › Apps › 6-Minute Journal</code>.':''} Every day is saved there as its own file.`}</p></div>
+    <div class="row"><button class="btn" data-act="connect">${h?`Open ${esc(h.name)}`:'Choose folder…'}</button>${h?'<button class="ghost small" data-act="connect" data-mode="pick">Choose a different folder…</button>':''}${CLOUD_AVAILABLE?'<button class="ghost small" data-act="use-cloud">Use Microsoft sign-in instead</button>':''}</div>
     ${S.connectMsg?`<p class="err">${esc(S.connectMsg)}</p>`:''}</article>`;
 }
 function relLabel(date){const t=S.date;return date===t?'Today':date===addDays(t,1)?'Tomorrow':date===addDays(t,-1)?'Yesterday':'';}
@@ -966,9 +998,94 @@ function viewCalendar(){
     ${isNow?`<div class="row"><button class="btn" data-act="open-day" data-date="${S.date}">Open today</button></div>`:''}</article>`;
 }
 
+// Help: a complete user guide, grouped into topics that open on click.
+function viewHelp(){
+  const url=location.protocol==='https:'?location.origin+location.pathname:'';
+  const topic=(id,title,body,open)=>`<details class="help" id="help-${id}" ${open?'open':''}><summary>${title}</summary><div class="help-b">${body}</div></details>`;
+  const topics=[
+  ['start','1. What this journal is',`
+    <p>The 6-Minute Journal is a daily planner based on the <em>6-Minute Success Journal</em> by Dominik Spenst. It takes about three minutes in the morning and three minutes in the evening.</p>
+    <ul><li><strong>Morning:</strong> gratitude, what you look forward to, one daily focus task, your other tasks, a to-relax list and appointments.</li>
+    <li><strong>Evening:</strong> your wins, the best moment, what you learned, a day rating and your habits.</li>
+    <li><strong>Every week:</strong> a weekly plan with habit tracker and a short reflection.</li>
+    <li><strong>Over time:</strong> the Progress tab shows whether you are doing what matters to you, based on your vision and values.</li></ul>
+    <p>Your journal is private. Nobody else can read it, and the app has no server that stores your entries.</p>`,true],
+  ['setup','2. First start: sign in or choose a folder',`
+    <p><strong>On a phone or tablet:</strong></p>
+    <ol><li>Open ${url?`<code>${esc(url)}</code>`:'the journal link'} in Safari (iPhone) or Chrome (Android).</li>
+    <li>Tap <strong>Sign in with Microsoft</strong> and use your work or personal Microsoft account.</li>
+    <li>Confirm the permission once. The app may only use its own folder <code>OneDrive › Apps › 6-Minute Journal</code>, nothing else.</li></ol>
+    <p><strong>On a PC (Edge or Chrome):</strong> you have two choices.</p>
+    <ul><li><strong>Microsoft sign-in</strong>, exactly as on the phone.</li>
+    <li><strong>A folder on your PC:</strong> open <em>Settings → Journal folder → Choose folder…</em>. The Windows folder window opens; browse to the folder, click <strong>Select Folder</strong> and then <strong>Allow</strong> (or "Edit files") when the browser asks. To stay in sync with your phone, choose <code>OneDrive › Apps › 6-Minute Journal</code> in your OneDrive folder.</li></ul>
+    <p><strong>Work accounts:</strong> if Microsoft shows <em>"Need admin approval"</em>, your IT department has to approve the app once for your organisation. Personal accounts confirm it themselves.</p>`],
+  ['install','3. Install it like an app',`
+    <ul><li><strong>iPhone:</strong> in Safari tap <strong>Share</strong> → <strong>Add to Home Screen</strong> → <strong>Add</strong>.</li>
+    <li><strong>Android:</strong> in Chrome tap <strong>⋮</strong> → <strong>Install app</strong> (or "Add to Home screen").</li>
+    <li><strong>PC (Edge):</strong> menu <strong>…</strong> → <strong>Apps</strong> → <strong>Install this site as an app</strong>. It then has its own window, Start menu entry and taskbar icon. In Chrome: menu <strong>⋮</strong> → <strong>Cast, save and share</strong> → <strong>Install page as app</strong>.</li></ul>
+    <p>The installed app updates itself whenever a new version is published.</p>`],
+  ['calendar','4. The calendar (start page)',`
+    <p>The app always opens on the calendar of the current month. Each day you wrote shows its <strong>day score</strong> in colour:</p>
+    <ul><li><span class="sc g">70+</span> strong day &nbsp; <span class="sc m">40 to 69</span> medium &nbsp; <span class="sc l">below 40</span> weak.</li>
+    <li>Today has a frame. Days without a page are plain. The line under each number shows that day's focus task (on a PC).</li></ul>
+    <p>Use <strong>‹ ›</strong> to change the month and <strong>This month</strong> to come back. <strong>Click a day</strong> to open it. The app first reads the saved page; if the day has no page yet you see <em>"This page is empty"</em> with the button <strong>Create page for …</strong>. A page is only ever created when you click that button.</p>`],
+  ['day','5. Filling in a day',`
+    <ol><li><strong>Grateful for:</strong> up to three things or people.</li>
+    <li><strong>Looking forward to:</strong> something you will enjoy today.</li>
+    <li><strong>Daily focus</strong> (the slice of cake): the one task that makes the day a success. Tag it with a life area and a value so Progress can check your balance.</li>
+    <li><strong>To-do list:</strong> tasks 2 and 3 ("whipped cream"), then everything else ("cherries on top"). Tick them off during the day.</li>
+    <li><strong>To-relax list:</strong> planned rest, taken as seriously as a meeting.</li>
+    <li><strong>Appointments and notes.</strong></li>
+    <li><strong>Evening:</strong> mini win, best moment, what you learned, and a rating from 1 to 5.</li>
+    <li><strong>Habits:</strong> tick the habits you did today.</li></ol>
+    <p>Grey italic sentences are only examples; they are never saved. Everything you type is saved automatically; the status at the top right shows <em>Saving…</em> and then <em>Saved to OneDrive</em> or <em>Saved to folder</em>.</p>
+    <p><strong>In the evening</strong> click <strong>Finish day &amp; prepare tomorrow</strong>: today is archived and tomorrow's page is created. Unfinished tasks move to tomorrow and show <span class="carried">↻ 1</span>, which counts how often they were postponed.</p>`],
+  ['edit','6. Correcting an earlier day',`
+    <p>Finished days and past days are <strong>archived</strong> and locked against accidental changes. To change one, open it in the calendar, click <strong>Edit page</strong>, make your changes and click <strong>Save</strong>. The page is updated and locked again, and it notes <em>"Last changed after archiving"</em>. You can also create and fill in a page for a past day you forgot.</p>`],
+  ['week','7. Week',`
+    <p>The weekly page has a calendar for appointments, a habit tracker for all seven days, notes, wins and a short weekly reflection with a rating. It also lists each day's focus task, so you see the week at a glance.</p>`],
+  ['values','8. Vision & values (do this first)',`
+    <ol><li><strong>Vision:</strong> describe your future self in six life areas (body and mind, career, family and friends, attitude, finances, leisure).</li>
+    <li><strong>Values test:</strong> pick the ten values that describe you, star the five most important, then compare them in pairs. The app ranks them for you.</li>
+    <li>Mark each value as <em>living it well</em> or <em>want more</em>, and answer three questions for the two values you want to work on.</li>
+    <li><strong>Habits:</strong> add the habits you want to track; they appear on every day page and in the weekly tracker.</li></ol>`],
+  ['progress','9. Progress and the day score',`
+    <p>The <strong>day score</strong> (0 to 100) is: daily focus done 40, share of tasks 2 and 3 done 20, at least one relax item done 15, share of habits done 15, evening reflection filled 10.</p>
+    <p>The Progress tab shows for 7, 30 or 90 days: focus and to-do completion, average score, streak, a score chart, where your focus went by life area and value, habit rates, postponed tasks and a weekly table. The sentences under <em>What the numbers say</em> point out what to improve. <strong>Copy data for a Claude chat</strong> copies a summary you can paste into Claude for a written coaching review.</p>`],
+  ['sync','10. Using several devices',`
+    <ul><li>All devices that use the same Microsoft account (or the same OneDrive folder) show the same journal.</li>
+    <li>The app fetches changes when you come back to it and every 45 seconds. <strong>Settings → Sync now</strong> does it immediately.</li>
+    <li>If two devices change the same page, nothing is overwritten: the app combines both versions.</li>
+    <li>Best practice: wait until the status shows <em>Saved</em> before closing the app.</li></ul>`],
+  ['settings','11. Settings and backup',`
+    <ul><li><strong>Journal folder:</strong> shows where your journal is saved. On a PC, <strong>Choose folder…</strong> opens the Windows folder window; <strong>Use Microsoft sign-in instead</strong> switches back. With the sign-in you can also keep separate journals in subfolders.</li>
+    <li><strong>Sync now</strong> and the time of the last sync.</li>
+    <li><strong>Account:</strong> the signed-in account and <strong>Sign out</strong>.</li>
+    <li><strong>App version</strong> at the bottom of the Sync section.</li>
+    <li><strong>Archive → Save snapshot</strong> stores the whole journal in one file in <code>backups</code>; <strong>Import from file</strong> loads it back.</li></ul>`],
+  ['files','12. Your files and privacy',`
+    <p>Your journal is a set of small files: <code>data/days</code> (one file per day), <code>data/weeks</code>, <code>data/meta/profile.json</code> (vision, values, habits), <code>pages</code> (a readable copy of each day) and <code>backups</code>. They live only in your own OneDrive or folder. The app code is public, your entries are not. Signing out removes the sign-in from this device; your files stay in OneDrive.</p>`],
+  ['trouble','13. Troubleshooting',`
+    <dl class="faq">
+    <dt>I don't see the latest version (for example no calendar).</dt><dd>PC: press <strong>Ctrl + Shift + R</strong>. iPhone: close the app completely and open it again; if that does not help, delete the website data for the journal in Settings → Safari → Advanced → Website Data. Settings shows the app version.</dd>
+    <dt>"Need admin approval" when signing in.</dt><dd>Your organisation must approve the app once. Ask your IT department.</dd>
+    <dt>Error AADSTS50011 after signing in.</dt><dd>The web address is not registered for the app. The person who manages the app registration must add the exact address, including the final slash.</dd>
+    <dt>The status shows "Not saved · retry".</dt><dd>There was no connection. Your text stays on screen; tap the status to try again once you are online.</dd>
+    <dt>"Not saved · sign in".</dt><dd>Your sign-in expired. Tap the status to sign in again; your changes are kept and saved afterwards.</dd>
+    <dt>A page looks empty on my second device.</dt><dd>Open Settings → <strong>Sync now</strong>, then open the day again from the calendar. Make sure both devices use the same account or folder (Settings → Journal folder).</dd>
+    <dt>"Choose folder…" is missing.</dt><dd>Phones and tablets have no folder window for websites. Use the Microsoft sign-in there; on a PC use Edge or Chrome.</dd>
+    <dt>"The journal folder could not be read".</dt><dd>Check the internet connection, or choose the folder again in Settings. The app never writes anything when it cannot read your files.</dd></dl>`]
+  ];
+  return banner()+`<article class="sheet"><div class="dhead"><span class="label">Help</span><h1 class="date">How to use the 6-Minute Journal</h1>
+    <p class="muted">Tap a topic to open it. New users: read topics 2, 4 and 5 first.</p></div>
+    <nav class="help-toc" aria-label="Help topics">${topics.map(([id,title])=>`<a href="#help-${id}" data-help="${id}">${esc(title)}</a>`).join('')}</nav>
+    ${topics.map(([id,title,body,open])=>topic(id,title,body,open)).join('')}
+    <p class="small muted">App version: ${esc(APP_VERSION)}</p></article>`;
+}
+
 function folderLabel(){
-  if(CLOUD_MODE) return 'OneDrive › Apps › 6-Minute Journal'+(S.sub?' › '+S.sub:'');
-  return S.dir?(S.dir.path||S.dir.name):'';
+  if(CLOUD_MODE) return 'OneDrive (Microsoft sign-in) › Apps › 6-Minute Journal'+(S.sub?' › '+S.sub:'');
+  return S.dir?(S.dir.path||('Folder on this PC: '+S.dir.name)):'';
 }
 function viewSettings(){
   const when=S.lastSync?new Date(S.lastSync).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',second:'2-digit'}):'not yet';
@@ -976,11 +1093,14 @@ function viewSettings(){
   // Storage
   h+=`<article class="sheet"><div class="dhead"><span class="label">Storage</span><h1 class="date">Journal folder</h1>
     <p class="muted">Currently used: <strong>${esc(folderLabel())}</strong></p></div>`;
-  if(CLOUD_MODE) h+=`<p class="small muted">The web app may only use its own OneDrive folder <code>Apps › 6-Minute Journal</code>. Inside it you can keep separate journals in subfolders, for example one per year. Leave the field empty for the main journal. Set the same name on every device that should show this journal.</p>
-    <div class="row"><input class="line" style="max-width:18rem" type="text" id="subFolder" value="${esc(S.sub)}" placeholder="Main journal (no subfolder)" aria-label="Subfolder name"><button class="btn sec2" data-act="set-sub">Use this folder</button></div>`;
-  else if(NATIVE) h+=`<div class="row"><button class="btn sec2" data-act="connect" data-mode="pick">Change folder</button><button class="ghost small" data-act="open-folder">Open folder</button></div>`;
-  else h+=`<div class="row"><button class="btn sec2" data-act="connect" data-mode="pick">Change folder</button></div>
-    <p class="small muted">Choose a folder that contains a journal (with a <code>data</code> folder) or an empty folder to start a new one.</p>`;
+  if(NATIVE) h+=`<div class="row"><button class="btn sec2" data-act="connect" data-mode="pick">Choose folder…</button><button class="ghost small" data-act="open-folder">Open folder</button></div>`;
+  else if(PICKER){
+    h+=`<div class="row"><button class="btn sec2" data-act="connect" data-mode="pick">Choose folder…</button>${!CLOUD_MODE&&CLOUD_AVAILABLE?'<button class="ghost small" data-act="use-cloud">Use Microsoft sign-in instead</button>':''}</div>
+      <p class="small muted">Opens the Windows folder window: browse to a folder, click <strong>Select Folder</strong>, then allow the browser to edit files there.
+      ${CLOUD_AVAILABLE?'To stay in sync with your phone, choose <code>OneDrive - ICODOS GmbH › Apps › 6-Minute Journal</code> (your phone saves there through the Microsoft sign-in).':'Choose a folder that contains a journal (with a <code>data</code> folder) or an empty folder to start a new one.'}</p>`;
+  } else if(CLOUD_MODE) h+=`<p class="small muted">On phones and tablets the journal is saved through your Microsoft sign-in in <code>Apps › 6-Minute Journal</code>. Choosing your own folder is possible on a PC in Edge or Chrome.</p>`;
+  if(CLOUD_MODE) h+=`<details><summary class="small">Separate journals in subfolders</summary><p class="small muted">Inside the app folder you can keep separate journals, for example one per year. Leave the field empty for the main journal. Set the same name on every device that should show this journal.</p>
+    <div class="row"><input class="line" style="max-width:18rem" type="text" id="subFolder" value="${esc(S.sub)}" placeholder="Main journal (no subfolder)" aria-label="Subfolder name"><button class="btn sec2" data-act="set-sub">Use this subfolder</button></div></details>`;
   if(S.folderMsg) h+=`<p class="small">${esc(S.folderMsg)}</p>`;
   h+=`</article>`;
   // Sync
@@ -1269,10 +1389,17 @@ const A={
         const p=await S.savedDir.requestPermission({mode:'readwrite'});
         if(p==='granted') return openFolder(S.savedDir);
       }
-      const h=await window.showDirectoryPicker({id:'smj6-journal',mode:'readwrite'});
-      await IDB.set('dir',h); S.savedDir=h; return openFolder(h);
-    }catch(e){if(e&&e.name!=='AbortError'){S.connectMsg='The folder could not be opened. Try again or choose the folder again.';render();}}
+      if(Object.keys(saveQ).length){S.folderMsg='Wait a moment until all changes are saved, then choose the folder.';render();return;}
+      // Opens the Windows "Select folder" window.
+      const h=await window.showDirectoryPicker({id:'smj6-journal',mode:'readwrite',startIn:'documents'});
+      if((await h.requestPermission({mode:'readwrite'}))!=='granted'){S.folderMsg='The browser was not allowed to edit files in that folder. Choose it again and click Allow.';render();return;}
+      await IDB.set('dir',h); S.savedDir=h;
+      if(CLOUD_AVAILABLE){lsSet('smj6:mode','folder');CLOUD_MODE=false;}
+      S.unlocked.clear(); await openFolder(h);
+      S.folderMsg=`Now using the folder "${h.name}" on this PC.`; if(S.tab==='settings') render();
+    }catch(e){if(e&&e.name!=='AbortError'){S.connectMsg=S.folderMsg='The folder could not be opened. Try again or choose another folder.';render();}}
   },
+  'use-cloud'(){if(Object.keys(saveQ).length){S.folderMsg='Wait a moment until all changes are saved.';render();return;}lsSet('smj6:mode','cloud');location.reload();},
   'restore-no'(){S.restore=null;render();},
   async 'restore-yes'(){const o=S.restore.data;S.restore=null;S.restoreMsg='Restoring…';render();let n=0,fail=0;
     for(const c of COLS){const src=o[c]||{};for(const [id,data] of Object.entries(src)){if(!data||typeof data!=='object')continue;
@@ -1282,6 +1409,8 @@ const A={
   retry(){if(CLOUD_MODE&&S.needLogin){A.signin();return;}
     for(const k of Object.keys(saveQ)){const [c,id]=k.split('/');saveQ[k].failed=false;flush(c,id);}}
 };
+document.addEventListener('click',e=>{const h=e.target.closest('a[data-help]');if(!h)return;e.preventDefault();
+  const d=document.getElementById('help-'+h.dataset.help);if(d){d.open=true;d.scrollIntoView({behavior:'smooth',block:'start'});}});
 document.addEventListener('click',e=>{const a=e.target.closest('[data-act]');if(!a||a.disabled)return;const f=A[a.dataset.act];if(f)f(a,e);});
 
 /* ---------- boot ---------- */
@@ -1292,6 +1421,9 @@ async function loadAll(background){
   const next={},base=new Map();
   for(const c of COLS){next[c]=new Map();
     for(const {id,data,etag} of await store.all(c)){
+      // Ignore stray files such as OneDrive conflict copies ("2026-10-18-PC.json").
+      if(c==='days'&&!/^\d{4}-\d{2}-\d{2}$/.test(id)) continue;
+      if(c==='weeks'&&!/^\d{4}-W\d{2}$/.test(id)) continue;
       if(c==='days')normDay(data); if(c==='weeks')normWeek(data);
       next[c].set(id,data); base.set(c+'/'+id,{etag:etag||null,data:JSON.parse(JSON.stringify(data))});
     }}
@@ -1314,15 +1446,15 @@ async function openFolder(h){
 async function boot(){
   S.tab='calendar'; // the app always starts on the calendar
   S.sub=lsGet('smj6:sub')||'';
+  if(CLOUD_AVAILABLE&&'serviceWorker' in navigator){
+    // updateViaCache:'none' makes the browser check sw.js on every start; when a new version takes over, reload once.
+    const hadController=!!navigator.serviceWorker.controller;
+    navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(r=>r.update()).catch(()=>{});
+    navigator.serviceWorker.addEventListener('controllerchange',()=>{
+      if(hadController&&!Object.keys(saveQ).length&&!sessionStorage.getItem('smj6:reloaded')){try{sessionStorage.setItem('smj6:reloaded','1');}catch(e){}location.reload();}
+    });
+  }
   if(CLOUD_MODE){
-    if('serviceWorker' in navigator){
-      // updateViaCache:'none' makes the browser check sw.js on every start; when a new version takes over, reload once.
-      const hadController=!!navigator.serviceWorker.controller;
-      navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(r=>r.update()).catch(()=>{});
-      navigator.serviceWorker.addEventListener('controllerchange',()=>{
-        if(hadController&&!Object.keys(saveQ).length&&!sessionStorage.getItem('smj6:reloaded')){try{sessionStorage.setItem('smj6:reloaded','1');}catch(e){}location.reload();}
-      });
-    }
     Auth.load();
     let r='none';
     try{r=await Auth.handleRedirect();}catch(e){console.warn('sign-in failed',e);S.connectMsg='Sign-in did not complete: '+(e.message||'unknown error');}
