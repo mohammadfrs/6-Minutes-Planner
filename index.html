@@ -372,6 +372,7 @@ const NATIVE=(window.chrome&&window.chrome.webview&&window.chrome.webview.hostOb
 /* ---------- web app: Microsoft sign-in + OneDrive app folder ----------
    Used when the page is served over https (GitHub Pages) and a client ID is configured.
    Each user's journal lives in their own OneDrive at Apps/<app name>/, same layout as the Windows app folder. */
+const APP_VERSION='2026-10-18 calendar';
 const CLOUD={clientId:'8b0e5366-6e9a-48c1-930b-9553783f2e0b',authority:'https://login.microsoftonline.com/common/oauth2/v2.0',
   scopes:'openid profile offline_access Files.ReadWrite.AppFolder'};
 const CLOUD_MODE=!NATIVE&&location.protocol==='https:'&&!CLOUD.clientId.startsWith('__');
@@ -986,7 +987,8 @@ function viewSettings(){
   h+=`<article class="sheet"><div class="dhead"><span class="label">Sync</span><h1 class="date">Sync now</h1>
     <p class="muted">Saves any open changes and loads the latest version of every page${CLOUD_MODE?' from OneDrive, including changes made on your other devices':' from the folder'}. The journal also syncs on its own when you return to it and every 45 seconds.</p></div>
     <div class="row"><button class="btn" data-act="sync" ${S.syncing?'disabled':''}>${S.syncing?'Syncing…':'Sync now'}</button><span class="small muted">Last synced: ${esc(when)}</span></div>
-    ${S.syncMsg?`<p class="small">${esc(S.syncMsg)}</p>`:''}</article>`;
+    ${S.syncMsg?`<p class="small">${esc(S.syncMsg)}</p>`:''}
+    <p class="small muted">App version: ${esc(APP_VERSION)}</p></article>`;
   // Account
   if(CLOUD_MODE) h+=`<article class="sheet"><div class="dhead"><span class="label">Account</span><h1 class="date">Microsoft account</h1>
     <p class="muted">Signed in as <strong>${esc(Auth.user?(Auth.user.name||Auth.user.username):'')}</strong>${Auth.user&&Auth.user.name?` (${esc(Auth.user.username)})`:''}.</p></div>
@@ -1313,7 +1315,14 @@ async function boot(){
   S.tab='calendar'; // the app always starts on the calendar
   S.sub=lsGet('smj6:sub')||'';
   if(CLOUD_MODE){
-    if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
+    if('serviceWorker' in navigator){
+      // updateViaCache:'none' makes the browser check sw.js on every start; when a new version takes over, reload once.
+      const hadController=!!navigator.serviceWorker.controller;
+      navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(r=>r.update()).catch(()=>{});
+      navigator.serviceWorker.addEventListener('controllerchange',()=>{
+        if(hadController&&!Object.keys(saveQ).length&&!sessionStorage.getItem('smj6:reloaded')){try{sessionStorage.setItem('smj6:reloaded','1');}catch(e){}location.reload();}
+      });
+    }
     Auth.load();
     let r='none';
     try{r=await Auth.handleRedirect();}catch(e){console.warn('sign-in failed',e);S.connectMsg='Sign-in did not complete: '+(e.message||'unknown error');}
